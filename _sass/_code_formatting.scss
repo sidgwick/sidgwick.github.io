@@ -1,31 +1,29 @@
 /**
  * Code formatting
  */
-pre,
-code {
-    font-size: 16px;
-    // background-color: #eef;
-    background-color: #49483e;
-    color: #f8f8f2;
-}
 
 code {
     padding: 1px 5px;
-    margin: 0 3px;
+    margin: 5px;
     border-radius: 3px;
+    color: #f8f8f2;
+    background-color: #272822;
+    font-family: monaco;
+    font-size: 0.935rem;
 }
 
-pre {
-    // border: 1px solid $grey-color-light;
+.highlight {
+    background-color: #272822;
     border-radius: 5px;
-    padding: 8px 12px;
-    overflow-x: auto;
-
-    > code {
-        border: 0;
-        padding-right: 0;
-        padding-left: 0;
+    margin-bottom: 25px;
+    
+    pre {
+        margin: 10px 10px 10px 10px;
+        code {
+            padding: 0;
+            margin: 0;
+            font-family: monaco;
+            font-size: 1.05rem;
+        }
     }
 }
-
-@import "pygments"
