@@ -1,0 +1,26 @@
+# Site settings
+title: Zhigang Song
+email: 1005411480a@gmail.com
+description: > # this means to ignore newlines until "baseurl:"
+    宋志刚(Sidgwick)的个人博客, 主要是一些技术记录和分享. 不写博客的技术人员不
+    是好的技术人员. 工作之余写点小博客, 记录学习中遇到的点点滴滴, 方便自己以后
+    查看, 也方便和我遇到一样问题的人.
+# the subpath of your site, e.g. /blog/
+baseurl: ""
+# the base hostname & protocol for your site
+url: "http://sidgwick.github.io"
+# twitter_username: jekyllrb
+github_username:  sidgwick
+
+# Build settings
+markdown: redcarpet
+redcarpet:
+    extensions:
+        - "no_intra_emphasis"
+        - "fenced_code_blocks"
+        - "autolink"
+        - "strikethrough"
+        - "superscript"
+highlighter: pygments
+
+permalink: /:categories/:title.html

@@ -1,0 +1,31 @@
+/**
+ * Code formatting
+ */
+pre,
+code {
+    font-size: 16px;
+    // background-color: #eef;
+    background-color: #49483e;
+    color: #f8f8f2;
+}
+
+code {
+    padding: 1px 5px;
+    margin: 0 3px;
+    border-radius: 3px;
+}
+
+pre {
+    // border: 1px solid $grey-color-light;
+    border-radius: 5px;
+    padding: 8px 12px;
+    overflow-x: auto;
+
+    > code {
+        border: 0;
+        padding-right: 0;
+        padding-left: 0;
+    }
+}
+
+@import "pygments"
