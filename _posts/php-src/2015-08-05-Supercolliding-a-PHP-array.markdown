@@ -5,6 +5,7 @@ excerpt: 插入特别挑选的65536个值到数组里, 居然要花费30秒的�
          需0.01秒.
 category: php-src
 ---
+
 本文**翻译**自Nikic的文章: [Supercolliding a PHP array], 我只是业余爱好者, 有句话叫把一本
 好书翻译怀了就是犯罪, 鉴于本人的业余水平, 请以原文为主, 慎重参考.
 
@@ -84,34 +85,31 @@ will also stay the same.)
 为啥这么慢?
 ------------------------------
 
-Well, for every insertion PHP has to traverse the whole linked list, element for element. On the
-first insertion it needs to traverse 0 elements (there is nothing there yet). On the second one it
-traverses 1 element. On the third one 2, on the fourth 3 and on the 64th one 63. Those who know
-a little bit of math probably know that `0+1+2+3+...+(n-1) = (n-1)*(n-2)/2`. So the number of
-elements to traverse is quadratic. For 64 elements it's `62*63/2 = 1953` traversals. For
-`2^16 = 65536` it's `65534*65535/2=2147385345`. As you see, the numbers grow fast. And with the
-number of iteration grows the execution time.
+额, 当PHP每次插入元素时, 都会一个元素接一个地遍历整个链表. 插入第一个的时候,
+只需遍历0个元素, 第二个遍历一个, 第三个遍历2个... 第64个遍历63个元素.
+有点数学知识的人就会知道`0+1+2+3+...+(n-1) = (n-1)*(n-2)/2`所以遍历的元素个
+数是平方级(quadratic)的, 64个元素就是`62*63/2 = 1953`次遍历. 对于
+`2^16 = 65536`就是`65534*65535/2=2147385345`. 现在你看到了,这个数涨的非常快,
+相应的执行时间也会加长.
 
-Hashtable collisions as DOS attack
-----------------------------------
+利用哈希碰撞发动DOS攻击
+-------------------------
 
-At this point you may wonder what the above is actually useful for. For the casual user: Not useful
-at all. But the "bad guys" can easily exploit behavior like the above to perform a DOS (Denial of
-Service) attack on a server. Remember that `$_GET` and `$_POST` and `$_REQUEST` are just normal
-arrays and suffer from the same problems. So by sending a specially crafted POST request you can
-easily take a server down.
+现在, 你可能想知道上面说的能用来做什么. 对普通人来说, 答案是没啥用.
+但是对那些"坏家伙"来说, 他们能很轻易的利用上面的行为来制造DOS(拒绝服务)攻击.
+要知道`$_GET`和`$_POST`以及`$_REQUEST`都是普通的数组, 它们都有这里说的问题,
+所以, 通过发送精心构造的POST请求, 你就可以很轻易的干掉一台服务器.
 
-PHP is not the only language vulnerable to this. Actually pretty much all other languages used for
-creating websites have similar problems, as was [presented at the 28C3 conference][2].
+PHP并不是唯一有这种问题的语言, 事实上还有很多语言都有这样的问题, 详情可以查
+看这里: [presented at the 28C3 conference][2].
 
-But there is hope! PHP already [landed a change][3] (which will ship with PHP 5.3.9) which will add
-a `max_input_vars` ini setting which defaults to `1000`. This setting determines the maximum number
-of POST/GET variables that are accepted, so now only a maximum of 1000 collisions can be created. If
-you run the above script with `2^10 = 1024` elements you will get runtimes in the order of 0.003
-seconds, which obviously is far less critical than 30 seconds. (Note though that above I am
-demonstrating an integer key collision. You can also collide string keys, in which case the
-traversal will be a good bit slower.)
+但是, 应该看到希望! PHP已经做了[修改][3](将在5.3.9版本发布), 它在INI文件添加
+了`max_input_vars`选项, 默认值为1000. 这个值决定了能接受的最大的POST/GET变量
+数目, 这就意味着只有最多1000个碰撞产生, 如果上面的代码只有`2^10 = 1024`个元素
+那么, 你只用0.003秒就能执行完毕, 这比30秒的情况好了不止一点.
 
+还有, 上文我使用了数字键碰撞, 你也可以使用字符串键来产生冲突,这会比数字键更
+费时间
 
   [1]: http://www.nruns.com/_downloads/advisory28122011.pdf
   [2]: http://events.ccc.de/congress/2011/Fahrplan/events/4680.en.html
