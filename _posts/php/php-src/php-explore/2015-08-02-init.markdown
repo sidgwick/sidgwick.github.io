@@ -2,7 +2,7 @@
 layout: post
 title:  "PHP内核探索"
 date:   2015-08-02 21:28:04
-categories: php-src core-explore
+categories: php php-src core-explore
 ---
 
 ## 问, 为什么要读PHP源码?

@@ -1,13 +1,13 @@
 ---
 layout: default
-title: PHP Source
-permalink: /php-src/
+title: PHP
+permalink: /php/
 sort: 1
 ---
 
 <div class="home">
 
-  <h1 class="page-heading">PHP源码分析系列</h1>
+  <h1 class="page-heading">PHP系列</h1>
 
   <ul class="post-list">
     {% for post in site.categories.php-src %}
