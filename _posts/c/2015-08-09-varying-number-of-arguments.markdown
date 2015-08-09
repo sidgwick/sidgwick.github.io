@@ -117,7 +117,7 @@ void foo(char *fmt, ...)
 
 int main()
 {
-    foo("scdss", "Hello", "A", 105, "all", "fine");
+    foo("scdss", "Hello", 'A', 105, "all", "fine");
 
     return 0;
 }
@@ -129,7 +129,7 @@ int main()
 [zhigang@song test]$ gcc varying_man_pages.c -Wall
 [zhigang@song test]$ ./a.out 
 string Hello
-char 
+char A
 int 105
 string all
 string fine
