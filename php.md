@@ -10,7 +10,7 @@ sort: 1
   <h1 class="page-heading">PHP系列</h1>
 
   <ul class="post-list">
-    {% for post in site.categories.php-src %}
+    {% for post in site.categories.php %}
       <li>
         <span class="post-meta">{{ post.date | date: "%b %-d, %Y" }}</span>
 
