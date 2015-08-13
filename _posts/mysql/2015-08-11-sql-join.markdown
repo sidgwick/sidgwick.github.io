@@ -1,0 +1,69 @@
+---
+layout: post
+title:  "SQL语句里面的join"
+date:   2015-08-11 18:28:04
+categories: mysql
+---
+
+对于SQL中`inner join`, `outer join`和`cross join`的区别很多人不知道, 我也是别人问起, 才查找资料看了下, 跟自己之前的认识差不多.
+如果你使用join连表, 默认的情况下`是inner join`. 另外, 开发中使用的`left join`和`right join`属于`outer join`, `outer join`还包括`full join`.
+下面我通过图标让大家认识它们的区别. 现有两张表, Table A 是左边的表, Table B 是右边的表. 其各有四条记录, 其中有两条记录name是相同的:
+
+![](http://7xl1j2.com1.z0.glb.clouddn.com/table-a-and-b.png "表结构")
+
+1. `INNER JOIN`产生的结果是AB的交集
+
+    ```sql
+    SELECT * FROM TableA a INNER JOIN TableB b ON a.name = b.name
+    ```
+
+    结果和示意图如下
+
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/result-innor-join.png "Inner join的结果示意") 
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/inner-a-and-b-set.png "A和B的交集")
+
+2. `LEFT [OUTER] JOIN`产生表A的完全集, 而B表中匹配的则有值, 没有匹配的则以`null`值取代.
+
+    ```sql
+    SELECT * FROM TableA a LEFT OUTER JOIN TableB b ON a.name = b.name
+    ```
+
+    `LEFT [OUTER] JOIN`产生表A的完全集, 而B表中匹配的则有值, 不匹配的以`null`代替
+
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/result-left-outer-join.png "left [outer] join的结果") 
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/left-outer-join-set.png "结果为A的全集, B中没有的以null代替")
+
+3. `RIGHT [OUTER] JOIN` 产生表B的完全集, 而A表中匹配的则有值, 没有匹配的则以`null`值取代.
+
+    ```sql
+    SELECT * FROM TableA a RIGHT OUTER JOIN TableB b ON a.name = b.name
+    ```
+
+    图标如left join类似
+
+4. `FULL [OUTER] JOIN`产生A和B的并集
+
+    ```sql
+    SELECT * FROM TableA a FULL OUTER JOIN TableB b ON a.name = b.name
+    ```
+
+    对于没有匹配的记录, 则会以`null`做为值.
+
+    你可以通过`is NULL`将没有匹配的值找出来:
+
+    ```sql
+    SELECT * FROM TableA a FULL OUTER JOIN TableB b ON a.name = b.name WHERE a.id IS null OR b.id IS null;
+    ```
+
+    `FULL [OUTER] JOIN`产生A和B的并集
+    
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/result-full-outer-join.png "full outer join产生的是A和B的并集")
+    ![](http://7xl1j2.com1.z0.glb.clouddn.com/full-outer-a-and-b-set.png "A和B的并集韦恩图表示")
+
+5. `CROSS JOIN`把表A和表B的数据进行一个`N*M`的组合, 即笛卡尔积. 如本例会产生`4*4=16`条记录, 在开发过程中我们肯定是要过滤数据, 所以这种很少用.
+
+    ```sql
+    SELECT * FROM TableA CROSS JOIN TableB
+    ```
+
+现在, 相信大家对`inner join`, `outer join`和`cross join`的区别已经一目了然了.
