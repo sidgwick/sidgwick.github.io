@@ -3,7 +3,7 @@ layout: post
 title: PHP数组的哈希碰撞
 excerpt: 插入特别挑选的65536个值到数组里, 居然要花费30秒的时间, 而在普通情况下, 这一操作只
          需0.01秒.
-category: php php-src
+categories: php php-src
 ---
 
 本文**翻译**自Nikic的文章: [Supercolliding a PHP array], 我只是业余爱好者, 有句话叫把一本
