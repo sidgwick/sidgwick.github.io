@@ -18,3 +18,7 @@ categories: others
 * `strtok`函数详解
 
 ## PHP内核
+
+## MySQL
+
+* `replace into`使用
