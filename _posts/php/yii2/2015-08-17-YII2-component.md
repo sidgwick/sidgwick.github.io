@@ -73,6 +73,18 @@ private function __unset($nm){
 1. 就是一个普通的behavior, 调用`detachBehavior`注销之即可.
 2. 是某个behavior的property, 那么需要把这个property设为`null`, 其他保持不变.
 
+## `attachEventHandler`, `detachEventHandler`以及`raiseEvent`
+
+前两个方法用于事件和处理函数绑定与解绑. 不管是绑定还是解绑,都用到了`event`类
+自身的处理方法, 即`add`和`remove`方法.
+
+`raiseEvent`负责生成事件, 并执行处理函数. 正常情况下, 这个方法会执行所有的事
+件处理函数, 但是若这个事件的`$handled`成员变量被设为`true`, 则之后的处理函数
+都将忽略.
+
+## `evaluateExpression`方法
+
+这个方法用于在当前component环境中执行一段PHP代码或者一个可调用变量
 
 暂时就这么多, 这次提交是最原始的版本, 到YII2发布差了差不多2年, 之后这个文件的注解,
 再慢慢地添加.
