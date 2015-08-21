@@ -23,4 +23,47 @@ YiiBase是Yii的基础包装, 可以理解成司令官的角色. 它用于自动
 若向这个方法传递了其他参数, 那么这些参数会被传递给新创建对象的构造函数(这里涉
 及到了ReflactionClass, 之前一直不知道Reflaction用在哪里, 这也算是一个实际应用吧).
 
-## 
+## import
+
+此方法用于引入一个类或者目录.
+
+引入一个类的操作和`include`此类的类文件一样, 主要的不同点在于引入一个类比引入一
+个类文件更加轻量, 因为引入一个类会在用到这个类的时候再去引入这个类文件.
+
+引入一个目录和向PHP的`include path`里面添加一个目录是一样的, 当有多个目录被引入
+时, 后引入的目录会有更高的优先级, 也即: 它们被加在PHP`include path`的前面.
+
+可以使用别名来引入类或者目录, 比如`application.components.GoogleMap`用于引入
+`GoogleMap`类. 而`application.components.*`用于引入`components`目录.
+
+同一个别名可以被多次`import`, 但只有第一次是有效的, 而且, 引入目录不会引入目
+录的子目录.
+
+从1.1.5版本(要求PHP >= 5.3)开始, `import`也可以接受名称空间参数, 工作方法和引
+入别名差不多, 只是点号分隔符被换为了反斜线. 此时, 名称空间的写法就需要遵守一
+定的规则了(用于方便的转换到目录). 规则要求, 当名称空间里面的反斜线被替换为点
+号时, 能组成一个有效的路径别名(path alias).
+
+## getPathOfAlias, setPathOfAlias
+
+下面来看`setPathOfAlias`, 此方法用于设定一个别名, 当传入的`path`为空, 就会删
+除这个别名. 这个类既不检查路径是否存在, 也不检查路径是不是规范, 一切靠自觉,
+你给啥, 就是啥
+
+要紧的是`getPathOfAlias`, 它用于把一个别名转换为一个文件地址. 这个方法不检查
+生成的目标文件地址是不是存在, 它仅仅检查别名里面的`root alias`的合法性.
+
+注意: **findModel**函数没有研究过, 这里调用到了.
+
+## autoload和registerAutoloader
+
+`autoload`被PHP的魔术方法`__autoload`调用, 这里实现了即用即加载.
+`registerAutoloader`用于注册新的autoloader, 它能确保`$app`的
+`autoload`有最高的优先级
+
+## t方法
+
+在这个方法是用于翻译的方法.
+
+## 其他
+
