@@ -17,6 +17,10 @@ categories: others
 
 * `strtok`函数详解
 
+## PHP
+
+* PHP名称空间: `use namespace as name`
+
 ## PHP内核
 
 ## MySQL
