@@ -80,5 +80,8 @@ coreMessages源, 对其他`category`使用messages消息源.
 `$language`指定目标语言, 当不指定时, 调用`Application::getLanguage`确定翻译为
 何种语言, 此参数自1.0.3开始可用
 
+TODO: `ChoiceFormat::format`, 具体的定义当前版本里面没有定义, 以后再看
+
 ## 其他
 
+还有一些琐碎的方法, 像日志, debug等, 都比较简单, 不介绍了
