@@ -13,3 +13,11 @@ echo "\n========================\n";
 $a = null;
 
 var_dump(isset($a));
+
+
+echo "\n========================\n";
+if ($arr instanceof Traversable) {
+    echo "Array is traversable\n";
+} else {
+    echo "Array is untraversable\n";
+}
