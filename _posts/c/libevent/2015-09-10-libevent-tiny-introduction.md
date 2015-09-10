@@ -621,3 +621,456 @@ main(int c, char **v)
     return 0;
 }
 ```
+
+But we’re still not done. Because generating and reading the `select()` bit
+arrays takes time proportional to the largest fd that you provided for
+`select()`, the `select()` call scales terribly when the number of sockets is
+high. [2](#footnote-2)
+
+Different operating systems have provided different replacement functions for
+select. These include `poll()`, `epoll()`, `kqueue()`, `evports`, and
+`/dev/poll`. All of these give better performance than `select()`, and all but
+`poll()` give O(1) performance for adding a socket, removing a socket, and for
+noticing that a socket is ready for IO.
+
+Unfortunately, none of the efficient interfaces is a ubiquitous standard. Linux
+has `epoll()`, the BSDs (including Darwin) have `kqueue()`, Solaris has
+`evports` and `/dev/poll`... and none of these operating systems has any of the
+others. So if you want to write a portable high-performance asynchronous
+application, you’ll need an abstraction that wraps all of these interfaces, and
+provides whichever one of them is the most efficient.
+
+And that’s what the lowest level of the Libevent API does for you. It provides
+a consistent interface to various `select()` replacements, using the most
+efficient version available on the computer where it’s running.
+
+Here’s yet another version of our asynchronous ROT13 server. This time, it
+uses Libevent 2 instead of `select()`. Note that the fd\_sets are gone now:
+instead, we associate and disassociate events with a struct event\_base, which
+might be implemented in terms of `select()`, `poll()`, `epoll()`, `kqueue()`,
+etc.
+
+### Example: A low-level ROT13 server with Libevent
+
+```c
+/* For sockaddr_in */
+#include <netinet/in.h>
+/* For socket functions */
+#include <sys/socket.h>
+/* For fcntl */
+#include <fcntl.h>
+
+#include <event2/event.h>
+
+#include <assert.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+
+#define MAX_LINE 16384
+
+void do_read(evutil_socket_t fd, short events, void *arg);
+void do_write(evutil_socket_t fd, short events, void *arg);
+
+char
+rot13_char(char c)
+{
+    /* We don't want to use isalpha here; setting the locale would change
+     * which characters are considered alphabetical. */
+    if ((c >= 'a' && c <= 'm') || (c >= 'A' && c <= 'M'))
+        return c + 13;
+    else if ((c >= 'n' && c <= 'z') || (c >= 'N' && c <= 'Z'))
+        return c - 13;
+    else
+        return c;
+}
+
+struct fd_state {
+    char buffer[MAX_LINE];
+    size_t buffer_used;
+
+    size_t n_written;
+    size_t write_upto;
+
+    struct event *read_event;
+    struct event *write_event;
+};
+
+struct fd_state *
+alloc_fd_state(struct event_base *base, evutil_socket_t fd)
+{
+    struct fd_state *state = malloc(sizeof(struct fd_state));
+    if (!state)
+        return NULL;
+    state->read_event = event_new(base, fd, EV_READ|EV_PERSIST, do_read, state);
+    if (!state->read_event) {
+        free(state);
+        return NULL;
+    }
+    state->write_event =
+        event_new(base, fd, EV_WRITE|EV_PERSIST, do_write, state);
+
+    if (!state->write_event) {
+        event_free(state->read_event);
+        free(state);
+        return NULL;
+    }
+
+    state->buffer_used = state->n_written = state->write_upto = 0;
+
+    assert(state->write_event);
+    return state;
+}
+
+void
+free_fd_state(struct fd_state *state)
+{
+    event_free(state->read_event);
+    event_free(state->write_event);
+    free(state);
+}
+
+void
+do_read(evutil_socket_t fd, short events, void *arg)
+{
+    struct fd_state *state = arg;
+    char buf[1024];
+    int i;
+    ssize_t result;
+    while (1) {
+        assert(state->write_event);
+        result = recv(fd, buf, sizeof(buf), 0);
+        if (result <= 0)
+            break;
+
+        for (i=0; i < result; ++i)  {
+            if (state->buffer_used < sizeof(state->buffer))
+                state->buffer[state->buffer_used++] = rot13_char(buf[i]);
+            if (buf[i] == '\n') {
+                assert(state->write_event);
+                event_add(state->write_event, NULL);
+                state->write_upto = state->buffer_used;
+            }
+        }
+    }
+
+    if (result == 0) {
+        free_fd_state(state);
+    } else if (result < 0) {
+        if (errno == EAGAIN) // XXXX use evutil macro
+            return;
+        perror("recv");
+        free_fd_state(state);
+    }
+}
+
+void
+do_write(evutil_socket_t fd, short events, void *arg)
+{
+    struct fd_state *state = arg;
+
+    while (state->n_written < state->write_upto) {
+        ssize_t result = send(fd, state->buffer + state->n_written,
+                              state->write_upto - state->n_written, 0);
+        if (result < 0) {
+            if (errno == EAGAIN) // XXX use evutil macro
+                return;
+            free_fd_state(state);
+            return;
+        }
+        assert(result != 0);
+
+        state->n_written += result;
+    }
+
+    if (state->n_written == state->buffer_used)
+        state->n_written = state->write_upto = state->buffer_used = 1;
+
+    event_del(state->write_event);
+}
+
+void
+do_accept(evutil_socket_t listener, short event, void *arg)
+{
+    struct event_base *base = arg;
+    struct sockaddr_storage ss;
+    socklen_t slen = sizeof(ss);
+    int fd = accept(listener, (struct sockaddr*)&ss, &slen);
+    if (fd < 0) { // XXXX eagain??
+        perror("accept");
+    } else if (fd > FD_SETSIZE) {
+        close(fd); // XXX replace all closes with EVUTIL_CLOSESOCKET */
+    } else {
+        struct fd_state *state;
+        evutil_make_socket_nonblocking(fd);
+        state = alloc_fd_state(base, fd);
+        assert(state); /*XXX err*/
+        assert(state->write_event);
+        event_add(state->read_event, NULL);
+    }
+}
+
+void
+run(void)
+{
+    evutil_socket_t listener;
+    struct sockaddr_in sin;
+    struct event_base *base;
+    struct event *listener_event;
+
+    base = event_base_new();
+    if (!base)
+        return; /*XXXerr*/
+
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = 0;
+    sin.sin_port = htons(40713);
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    evutil_make_socket_nonblocking(listener);
+
+#ifndef WIN32
+    {
+        int one = 1;
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    }
+#endif
+
+    if (bind(listener, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
+        perror("bind");
+        return;
+    }
+
+    if (listen(listener, 16)<0) {
+        perror("listen");
+        return;
+    }
+
+    listener_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
+    /*XXX check it */
+    event_add(listener_event, NULL);
+
+    event_base_dispatch(base);
+}
+
+int
+main(int c, char **v)
+{
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    run();
+    return 0;
+}
+```
+
+**NOTE:**
+
+#### Other things to note in the code
+
+instead of typing the sockets as "int", we’re using the type
+evutil_socket_t. Instead of calling fcntl(O_NONBLOCK) to make the sockets
+nonblocking, we’re calling evutil_make_socket_nonblocking. These changes
+make our code compatible with the divergent parts of the Win32 networking
+API.
+
+## What about convenience? (and what about Windows?)
+
+You’ve probably noticed that as our code has gotten more efficient, it has also
+gotten more complex. Back when we were forking, we didn’t have to manage a
+buffer for each connection: we just had a separate stack-allocated buffer for
+each process. We didn’t need to explicitly track whether each socket was
+reading or writing: that was implicit in our location in the code. And we
+didn’t need a structure to track how much of each operation had completed: we
+just used loops and stack variables.
+
+Moreover, if you’re deeply experienced with networking on Windows, you’ll
+realize that Libevent probably isn’t getting optimal performance when it’s
+used as in the example above. On Windows, the way you do fast asynchronous IO
+is not with a `select()-like` interface: it’s by using the IOCP (IO Completion
+Ports) API. Unlike all the fast networking APIs, IOCP does not alert your
+program when a socket is ready for an operation that your program then has to
+perform. Instead, the program tells the Windows networking stack to start a
+network operation, and IOCP tells the program when the operation has finished.
+
+Fortunately, the Libevent 2 "bufferevents" interface solves both of these
+issues: it makes programs much simpler to write, and provides an interface that
+Libevent can implement efficiently on Windows and on Unix.
+
+Here’s our ROT13 server one last time, using the bufferevents API.
+
+### Example: A simpler ROT13 server with Libevent
+
+```c
+/* For sockaddr_in */
+#include <netinet/in.h>
+/* For socket functions */
+#include <sys/socket.h>
+/* For fcntl */
+#include <fcntl.h>
+
+#include <event2/event.h>
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+
+#include <assert.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+
+#define MAX_LINE 16384
+
+void do_read(evutil_socket_t fd, short events, void *arg);
+void do_write(evutil_socket_t fd, short events, void *arg);
+
+char
+rot13_char(char c)
+{
+    /* We don't want to use isalpha here; setting the locale would change
+     * which characters are considered alphabetical. */
+    if ((c >= 'a' && c <= 'm') || (c >= 'A' && c <= 'M'))
+        return c + 13;
+    else if ((c >= 'n' && c <= 'z') || (c >= 'N' && c <= 'Z'))
+        return c - 13;
+    else
+        return c;
+}
+
+void
+readcb(struct bufferevent *bev, void *ctx)
+{
+    struct evbuffer *input, *output;
+    char *line;
+    size_t n;
+    int i;
+    input = bufferevent_get_input(bev);
+    output = bufferevent_get_output(bev);
+
+    while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF))) {
+        for (i = 0; i < n; ++i)
+            line[i] = rot13_char(line[i]);
+        evbuffer_add(output, line, n);
+        evbuffer_add(output, "\n", 1);
+        free(line);
+    }
+
+    if (evbuffer_get_length(input) >= MAX_LINE) {
+        /* Too long; just process what there is and go on so that the buffer
+         * doesn't grow infinitely long. */
+        char buf[1024];
+        while (evbuffer_get_length(input)) {
+            int n = evbuffer_remove(input, buf, sizeof(buf));
+            for (i = 0; i < n; ++i)
+                buf[i] = rot13_char(buf[i]);
+            evbuffer_add(output, buf, n);
+        }
+        evbuffer_add(output, "\n", 1);
+    }
+}
+
+void
+errorcb(struct bufferevent *bev, short error, void *ctx)
+{
+    if (error & BEV_EVENT_EOF) {
+        /* connection has been closed, do any clean up here */
+        /* ... */
+    } else if (error & BEV_EVENT_ERROR) {
+        /* check errno to see what error occurred */
+        /* ... */
+    } else if (error & BEV_EVENT_TIMEOUT) {
+        /* must be a timeout event handle, handle it */
+        /* ... */
+    }
+    bufferevent_free(bev);
+}
+
+void
+do_accept(evutil_socket_t listener, short event, void *arg)
+{
+    struct event_base *base = arg;
+    struct sockaddr_storage ss;
+    socklen_t slen = sizeof(ss);
+    int fd = accept(listener, (struct sockaddr*)&ss, &slen);
+    if (fd < 0) {
+        perror("accept");
+    } else if (fd > FD_SETSIZE) {
+        close(fd);
+    } else {
+        struct bufferevent *bev;
+        evutil_make_socket_nonblocking(fd);
+        bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+        bufferevent_setcb(bev, readcb, NULL, errorcb, NULL);
+        bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
+        bufferevent_enable(bev, EV_READ|EV_WRITE);
+    }
+}
+
+void
+run(void)
+{
+    evutil_socket_t listener;
+    struct sockaddr_in sin;
+    struct event_base *base;
+    struct event *listener_event;
+
+    base = event_base_new();
+    if (!base)
+        return; /*XXXerr*/
+
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = 0;
+    sin.sin_port = htons(40713);
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    evutil_make_socket_nonblocking(listener);
+
+#ifndef WIN32
+    {
+        int one = 1;
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    }
+#endif
+
+    if (bind(listener, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
+        perror("bind");
+        return;
+    }
+
+    if (listen(listener, 16)<0) {
+        perror("listen");
+        return;
+    }
+
+    listener_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
+    /*XXX check it */
+    event_add(listener_event, NULL);
+
+    event_base_dispatch(base);
+}
+
+int
+main(int c, char **v)
+{
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    run();
+    return 0;
+}
+```
+How efficient is all of this, really?
+
+XXXX write an efficiency section here. The benchmarks on the libevent page are
+really out of date.
+
+[1](#footnote-1) A file descriptor is the number the kernel assigns to the
+socket when you open it. You use this number to make Unix calls referring to
+the socket.
+[2](#footnote-2) On the userspace side, generating and reading the bit arrays
+can be made to take time proportional to the number of fds that you provided
+for select(). But on the kernel side, reading the bit arrays takes time
+proportional to the largest fd in the bit array, which tends to be around the
+total number of fds in use in the whole program, regardless of how many fds
+are added to the sets in `select()`.
