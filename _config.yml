@@ -21,6 +21,7 @@ redcarpet:
         - "autolink"
         - "strikethrough"
         - "superscript"
+        - "tables"
 highlighter: pygments
 
 permalink: /:categories/:title.html
