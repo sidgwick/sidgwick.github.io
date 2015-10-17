@@ -81,6 +81,46 @@ int main()
     * 添加`AM_INIT_AUTOMAKE`, 有这一句才会产生aclocal.m4
     * `AC_OUTPUT(makefile)` 表示在当前文件夹里面生成一个Makefile文件
 
+### 补充
+
+* `AC_ARG_WITH`
+
+    原型为
+
+    `AC_ARG_WITH (package, help-string, [action-if-given], [action-if-not-given])`
+
+    就是通常见到的`--with-foo=bar`选项, `action-if-given`和`action-if-not-gived`
+    分别指定了给出这个选项和不给出这个选项的动作, 比如03年(时间有点早了),
+    memcached的configure.ac里面有如下一段:
+
+    ```bash
+    AC_ARG_WITH(libevent,
+                AC_HELP_STRING([--with-libevent=DIRECTORY],[base directory
+                for libevent]))
+    if test ${with_libevent+set} = set && test $with_libevent != no; then
+        CFLAGS="$CFLAGS -I$with_libevent/include"
+        LDFLAGS="$LDFLAGS -L$with_libevent/lib"
+    fi
+    ```
+
+* `AC_CHECK_HEADER`
+
+    原型
+
+    `AC_CHECK_HEADER(malloc.h, AC_DEFINE(HAVE_MALLOC_H,,[do we have malloc.h?]))`
+
+
+* `AC_ARG_ENABLE`
+
+    ``
+
+
+
+    AC_CACHE_CHECK (message, cache-id, commands-to-set-it)
+
+    AC_TRY_LINK (includes, function-body, [action-if-true], [action-if-false])
+
+
 
 3. 执行`aclocal`, 生成aclocal.m4
 
