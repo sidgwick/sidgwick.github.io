@@ -14,6 +14,8 @@ github_username:  sidgwick
 
 # Build settings
 markdown: redcarpet
+markdown_ext:  markdown,mkdown,mkdn,mkd,md
+
 redcarpet:
     extensions:
         - "no_intra_emphasis"
@@ -22,6 +24,8 @@ redcarpet:
         - "strikethrough"
         - "superscript"
         - "tables"
+        - "space_after_headers"
+
 highlighter: pygments
 
 permalink: /:categories/:title.html
