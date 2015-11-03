@@ -26,3 +26,12 @@ categories: others
 ## MySQL
 
 * `replace into`使用
+
+# TODO list
+
+1. C语言信号文章
+2. C语言文件缓存处理(setbuf函数)
+3. C语言命令行参数处理(getopt函数)
+4. C语言资源相关文章
+5. fcntl操作文件描述符特性
+5. 写一篇set/getsockopt的文章
