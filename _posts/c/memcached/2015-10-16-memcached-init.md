@@ -547,134 +547,7 @@ static void conn_init(void) {
 }
 ```
 
-初始化slabsclass.
-
-```c
-#define POWER_SMALLEST 1
-#define POWER_LARGEST  200
-#define POWER_BLOCK 1048576
-#define CHUNK_ALIGN_BYTES (sizeof(void *))
-#define DONT_PREALLOC_SLABS
-
-/* powers-of-N allocation structures */
-
-typedef struct {
-    unsigned int size;      /* sizes of items */
-    unsigned int perslab;   /* how many items per slab */
-
-    void **slots;           /* list of item ptrs */
-    unsigned int sl_total;  /* size of previous array */
-    unsigned int sl_curr;   /* first free slot */
-
-    void *end_page_ptr;         /* pointer to next free item at end of page, or 0 */
-    unsigned int end_page_free; /* number of items remaining at end of last alloced page */
-
-    unsigned int slabs;     /* how many slabs were allocated for this class */
-
-    void **slab_list;       /* array of slab pointers */
-    unsigned int list_size; /* size of prev array */
-
-    unsigned int killing;  /* index+1 of dying slab, or zero if none */
-} slabclass_t;
-
-static slabclass_t slabclass[POWER_LARGEST + 1];
-static size_t mem_limit = 0;
-static size_t mem_malloced = 0;
-static int power_largest;
-
-/*
- * Forward Declarations
- */
-static int do_slabs_newslab(const unsigned int id);
-
-#ifndef DONT_PREALLOC_SLABS
-/* Preallocate as many slab pages as possible (called from slabs_init)
-   on start-up, so users don't get confused out-of-memory errors when
-   they do have free (in-slab) space, but no space to make new slabs.
-   if maxslabs is 18 (POWER_LARGEST - POWER_SMALLEST + 1), then all
-   slab types can be made.  if max memory is less than 18 MB, only the
-   smaller ones will be made.  */
-static void slabs_preallocate (const unsigned int maxslabs);
-#endif
-
-
-/*
- * Determines the chunk sizes and initializes the slab class descriptors
- * accordingly.
- */
-void slabs_init(const size_t limit, const double factor) {
-    int i = POWER_SMALLEST - 1;
-    unsigned int size = sizeof(item) + settings.chunk_size;
-
-    /* Factor of 2.0 means use the default memcached behavior */
-    if (factor == 2.0 && size < 128)
-        size = 128;
-
-    mem_limit = limit;
-    memset(slabclass, 0, sizeof(slabclass));
-
-    while (++i < POWER_LARGEST && size <= POWER_BLOCK / 2) {
-        /* Make sure items are always n-byte aligned */
-        if (size % CHUNK_ALIGN_BYTES)
-            size += CHUNK_ALIGN_BYTES - (size % CHUNK_ALIGN_BYTES);
-
-        slabclass[i].size = size;
-        slabclass[i].perslab = POWER_BLOCK / slabclass[i].size;
-        size *= factor;
-        if (settings.verbose > 1) {
-            fprintf(stderr, "slab class %3d: chunk size %6u perslab %5u\n",
-                    i, slabclass[i].size, slabclass[i].perslab);
-        }
-    }
-
-    power_largest = i;
-    slabclass[power_largest].size = POWER_BLOCK;
-    slabclass[power_largest].perslab = 1;
-
-    /* for the test suite:  faking of how much we've already malloc'd */
-    {
-        char *t_initial_malloc = getenv("T_MEMD_INITIAL_MALLOC");
-        if (t_initial_malloc) {
-            mem_malloced = (size_t)atol(t_initial_malloc);
-        }
-
-    }
-
-#ifndef DONT_PREALLOC_SLABS
-    {
-        char *pre_alloc = getenv("T_MEMD_SLABS_ALLOC");
-
-        if (pre_alloc == NULL || atoi(pre_alloc) != 0) {
-            slabs_preallocate(power_largest);
-        }
-    }
-#endif
-}
-
-#ifndef DONT_PREALLOC_SLABS
-static void slabs_preallocate (const unsigned int maxslabs) {
-    int i;
-    unsigned int prealloc = 0;
-
-    /* pre-allocate a 1MB slab in every size class so people don't get
-       confused by non-intuitive "SERVER_ERROR out of memory"
-       messages.  this is the most common question on the mailing
-       list.  if you really don't want this, you can rebuild without
-       these three lines.  */
-
-    for (i = POWER_SMALLEST; i <= POWER_LARGEST; i++) {
-        if (++prealloc > maxslabs)
-            return;
-        /* 这里给slabclass_i分配一个页面(page或者叫slab, 大小为1M) */
-        do_slabs_newslab(i); 
-    }
-
-}
-#endif
-```
-
-这段代码很长, 但是逻辑很简单, 首先初始化slabclass桶. 之后根据编译条件, 选择是
-不是预分配空间给各个slabclass
+初始化slabsclass, 参考[Memcached内存管理](Memcached-slabs)
 
 ##### 如果处在managed模式, 要分配managed数组空间
 
@@ -873,9 +746,10 @@ clock_handler(0, 0, 0);
 
 当程序并发量比较高的情况下, 利用程序时钟能显著减少对`time()`函数的系统调用
 
-19. 初始化LRU的todelete队列
+19. 初始化todelete队列
 
-但是, 这里并不是LRU算法. 这里只是把那些已经过期的数据剔除掉罢了
+但是, 这里并不是LRU算法, 这个对列和LRU没关系. 这里只是把那些已经过期的数据剔除
+掉罢了.
 
 ```c
 static struct event deleteevent;
