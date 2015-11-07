@@ -480,49 +480,8 @@ static void stats_init(void) {
 ```
 
 初始化key哈希表, 确切地说, 是分配哈希桶. 哈希链表不在这里. 这里只是简单的分配
-了要使用的内存资源.
+了要使用的内存资源. 详细介绍在[这里](Memcached-assoc-xxx)
 
-```c
-typedef  unsigned long  int  ub4;   /* unsigned 4-byte quantities */
-typedef  unsigned       char ub1;   /* unsigned 1-byte quantities */
-
-/* how many powers of 2's worth of buckets we use */
-static int hashpower = 16;
-
-#define hashsize(n) ((ub4)1<<(n))
-#define hashmask(n) (hashsize(n)-1)
-
-/* Main hash table. This is where we look except during expansion. */
-static item** primary_hashtable = 0;
-
-/*
- * Previous hash table. During expansion, we look here for keys that haven't
- * been moved over to the primary yet.
- */
-static item** old_hashtable = 0;
-
-/* Number of items in the hash table. */
-static int hash_items = 0;
-
-/* Flag: Are we in the middle of expanding now? */
-static int expanding = 0;
-
-/*
- * During expansion we migrate values with bucket granularity; this is how
- * far we've gotten so far. Ranges from 0 .. hashsize(hashpower - 1) - 1.
- */
-static int expand_bucket = 0;
-
-void assoc_init(void) {
-    unsigned int hash_size = hashsize(hashpower) * sizeof(void*);
-    primary_hashtable = malloc(hash_size);
-    if (! primary_hashtable) {
-        fprintf(stderr, "Failed to init hashtable.\n");
-        exit(EXIT_FAILURE);
-    }
-    memset(primary_hashtable, 0, hash_size);
-}
-```
 
 初始化网络回收池. 当一些网络链接关闭时, 我们把它们的资源缓存在内存里, 当有新的
 连接请求进来时, 我们就不用去重新向OS申请资源了.
