@@ -85,6 +85,8 @@ slabclass的各个slab, `list_size`是指针数组的大小, `slab_list`用到�
 2^N 来分配的, 这个值应该大于等于`slabs`. 最下面的killing作用不甚清除, 我随时
 [补充](#TODO)
 
+*补充* killing指的是要reassign那个slab, 这个成员函数好象就在这里用到了
+
 在往后是几个文件作用域变量, 简单看一下. 需要注意, slabclass的长度是
 `POWER_LARGEST + 1`
 
@@ -271,7 +273,7 @@ static int do_slabs_newslab(const unsigned int id) {
 }
 ```
 
-## slab的分配算法
+## slab item的分配算法
 
 上面介绍了slabclass的初始化过程, 在运行中, 当slabclass上的slots里面没有可用空
 间的时候, 就会向系统申请新的页面, 这个过程就是memcached内存管理比较核心的东西
@@ -303,10 +305,10 @@ unsigned int slabs_clsid(const size_t size) {
 }
 ```
 
-事实上, 函数里调用的是一个叫做`slabs_alloc`的函数, 它实际上是一个宏, 根据编译选项的不
-同, 可能是`do_slabs_alloc`或者`mt_slabs_alloc`. 这个宏定义在memcached.h中, 相
-关代码摘抄如下(这里定义了巨量的多线程加锁版本函数, 我们只看涉及到的,
-其他的以后再说).
+事实上, 函数里在分配item空间时, 调用的是一个叫做`slabs_alloc`的函数, 它实际上
+是一个宏, 根据编译选项的不同, 可能是`do_slabs_alloc`或者`mt_slabs_alloc`. 这
+个宏定义在memcached.h中, 相关代码摘抄如下(这里定义了巨量的多线程加锁版本函数,
+我们只看涉及到的, 其他的以后再说).
 
 ```c
 #ifdef USE_THREADS
@@ -326,13 +328,27 @@ OK, 由于`mt_slabs_alloc`只是`do_slabs_alloc`的加锁版本, 那么我们先
 void *do_slabs_alloc(const size_t size) {
     slabclass_t *p;
 
+    /* 找ID? 我们已经知道你是怎么找的啦. */
     unsigned int id = slabs_clsid(size);
     if (id < POWER_SMALLEST || id > power_largest)
         return NULL;
 
+    /* 定位到相应的slabclass, 待会从里面取得item存储空间 */
     p = &slabclass[id];
+    /* 下面这个断言很有意思, 揭示了新的item分配的一些内部状态, 来解释一下.
+     * p->sl_curr == 0 表明, 这个新slabclass的第一个空闲item槽(slot)为空,
+     * 即初始化的状态. 因为只有在这种状态下, 我们才会考虑使用`end_page_ptr`
+     * 指向的空闲item. 然后如果在这里发现空间不够, 需要申请新的slab. 否则,
+     * 我们就不需要去申请新的slab. 当该值不为零, 我们就需要验证第二个条件,
+     * 这个状态涉及到一些我们在删除item的时候的一些操作, 在删除时, 我们有设定
+     * slabs_clsid = 0的操作. 这里拿来验证一下以确保我们得到的确实是释放了的
+     * 空闲chunk
+     */
     assert(p->sl_curr == 0 || ((item *)p->slots[p->sl_curr - 1])->slabs_clsid == 0);
 
+/* USE_SYSTEM_MALLOC 定义是不是使用我们自己的这一套slab内存管理系统
+ * 若不使用, 就直接调用系统接口, 这种方式的效率肯定比不上slab, 但是优点就是简单
+ */
 #ifdef USE_SYSTEM_MALLOC
     if (mem_limit && mem_malloced + size > mem_limit)
         return 0;
@@ -341,17 +357,27 @@ void *do_slabs_alloc(const size_t size) {
 #endif
 
     /* fail unless we have space at the end of a recently allocated page,
-       we have something on our freelist, or we could allocate a new page */
+       we have something on our freelist, or we could allocate a new page
+       检查两个地方, 即sl_curr和end_page_ptr, 当着两个都为0, 我们就需要
+       申请新的slab了, sl_curr == 0表示没有空闲item好理解. end_page_ptr
+       在哪设置? 答案是本函数后面几行, 请仔细看.
+
+       do_slabs_alloc会帮我们正确的设置end_page_ptr以及end_page_free,
+       后面我们就可以高枕无忧的获取新item内存了
+     */
     if (! (p->end_page_ptr != 0 || p->sl_curr != 0 || do_slabs_newslab(id) != 0))
         return 0;
 
-    /* return off our freelist, if we have one */
+    /* return off our freelist, if we have one, 这里是从slots反会, 优先使用 */
     if (p->sl_curr != 0)
         return p->slots[--p->sl_curr];
 
-    /* if we recently allocated a whole page, return from that */
+    /* if we recently allocated a whole page, return from that
+       不行就从end_page_ptr(最后一次分配的那个页面)返回
+     */
     if (p->end_page_ptr) {
         void *ptr = p->end_page_ptr;
+        /* end_page_ptr增长一个item大小, end_page_free 减去1 */
         if (--p->end_page_free != 0) {
             p->end_page_ptr += p->size;
         } else {
@@ -360,10 +386,169 @@ void *do_slabs_alloc(const size_t size) {
         return ptr;
     }
 
+    /* 走到这? 去死吧, 肯定哪里出错了 */
     return NULL;  /* shouldn't ever get here */
 }
 ```
 
+## slab item的回收算法
 
+有分配, 对应的也会有回收.现在我们来了解下实现的细节. 此函数接受两个参数,
+分别是item的pointer和size. 这个函数只是实现了内存回收, 具体的item作废, 是在
+item管理模块完成的. 我们在[其他文章](#TODO)做详细介绍
 
+```c
+void do_slabs_free(void *ptr, const size_t size) {
+    unsigned char id = slabs_clsid(size);
+    slabclass_t *p;
+
+    /* 本函数被调用之前, 已经准备好了将要释放这个item,
+       那时候它的slabs_clsid即已经为0了 */
+    assert(((item *)ptr)->slabs_clsid == 0);
+    /* 断言ID应该在一个合理的范围 */
+    assert(id >= POWER_SMALLEST && id <= power_largest);
+    if (id < POWER_SMALLEST || id > power_largest)
+        return;
+
+    /* 老规矩, 操作引用. */
+    p = &slabclass[id];
+
+/* 使用系统调用管理内存 */
+#ifdef USE_SYSTEM_MALLOC
+    mem_malloced -= size;
+    free(ptr);
+    return;
+#endif
+
+    /* slots槽满了, 新分配一点槽, 用来装更多的空闲chunk */
+    if (p->sl_curr == p->sl_total) { /* need more space on the free list */
+        int new_size = (p->sl_total != 0) ? p->sl_total * 2 : 16;  /* 16 is arbitrary */
+        void **new_slots = realloc(p->slots, new_size * sizeof(void *));
+        if (new_slots == 0)
+            return;
+        p->slots = new_slots;
+        p->sl_total = new_size;
+    }
+    /* 闲置chunk放到槽里 */
+    p->slots[p->sl_curr++] = ptr;
+    return;
+}
+```
+
+至此, slabs模块已经介绍了个大概了, 还剩下统计和reassign两个功能没有介绍. 统计
+我们打算到介绍Memcached的统计功能时再介绍. 下面来看看reassign. 源码注释里提到,
+这个功能默认是关闭的, 应为它可能会造成内存的浪费, 但是这个方法实现了手动管理
+内存的机制, 权衡之下, 这个功能还是可以说是利器. 不过可能并不好用, 因为迁移slab
+要满足源slab的新slab指针指向空并且要有slab. 目标slab要满足新slab指针指向空, 还
+要有空间来容纳这个迁过来的slab. 仅仅是指向空这些条件, 在整体内存没有达到
+settings.maxbytes或者内存没有耗干之前, 还是比较难以控制的. 当然, 在达到内存上
+限之后, 这些条件就一定会满足了. 到那个时候使用slab reassign就好多了
+
+```c
+```
+
+下面是实现reassign的代码, 利用这段代码, 可以实现手动管理内存的需求.
+
+```c
+#ifdef ALLOW_SLABS_REASSIGN
+/* Blows away all the items in a slab class and moves its slabs to another
+ * class. This is only used by the "slabs reassign" command, for manual tweaking
+ * of memory allocation. It's disabled by default since it requires that all
+ * slabs be the same size (which can waste space for chunk size mantissas(尾数) of
+ * other than 2.0).
+ * 1 = success
+ * 0 = fail
+ * -1 = tried. busy. send again shortly.
+ *
+ * 这里说, 需要大小一样, 就是指len = POWER_LARGEST or (size * perslab)
+ */
+int do_slabs_reassign(unsigned char srcid, unsigned char dstid) {
+    void *slab, *slab_end;
+    slabclass_t *p, *dp;
+    void *iter;
+    bool was_busy = false;
+
+    /* 先判断数据是不是明显不符合条件 */
+    if (srcid < POWER_SMALLEST || srcid > power_largest ||
+        dstid < POWER_SMALLEST || dstid > power_largest)
+        return 0;
+
+    /* 操作引用 */
+    p = &slabclass[srcid];
+    dp = &slabclass[dstid];
+
+    /* fail if src still populating, or no slab to give up in src
+     * 能迁移的前提是, 本slabclass没有空闲的end_page, 并且它包含的
+     * items个数不能为0, 也就是说, 这个slabclass不能为空
+     * 简单说, 就是
+     *
+     * if (p->end_page_ptr == 0 && p->slabs != 0)
+     */
+    if (p->end_page_ptr || ! p->slabs)
+        return 0;
+
+    /* fail if dst is still growing or we can't make room to hold its new one
+     * 道理和src slabcalss一样的, 但是增加了slab_list和list_size的检查, 确保
+     * 有空间接受新来的这个slab
+     */
+    if (dp->end_page_ptr || ! grow_slab_list(dstid))
+        return 0;
+
+    /* killing指的是要reassign那个slab, 从1开始计数 */
+    if (p->killing == 0) p->killing = 1;
+
+    /* 找到源空间的起始地址 */
+    slab = p->slab_list[p->killing - 1];
+    slab_end = (char*)slab + POWER_BLOCK;
+
+    /* 源空间里面的所有item都不要了, 清空, 关于item结构成员的细节,
+     * 参考我其他的博客.
+     */
+    for (iter = slab; iter < slab_end; (char*)iter += p->size) {
+        item *it = (item *)iter;
+        /* slabs_clsid不为0, 表示这是一个有效数据 */
+        if (it->slabs_clsid) {
+            /* refcount大于0, 表示在其他地方正在使用这个值, 目前不能删 */
+            if (it->refcount) was_busy = true;
+            /* 把item从链表里面除掉 */
+            item_unlink(it);
+        }
+    }
+
+    /* go through free list and discard items that are no longer part of this slab
+     * 下面的过程就是剔除slots里面属于src slab的内容, 这个过程还是很巧秒的.
+     */
+    {
+        int fi;
+        for (fi = p->sl_curr - 1; fi >= 0; fi--) {
+            if (p->slots[fi] >= slab && p->slots[fi] < slab_end) {
+                p->sl_curr--;
+                if (p->sl_curr > fi) p->slots[fi] = p->slots[p->sl_curr];
+            }
+        }
+    }
+
+    if (was_busy) return -1;
+
+    /* if good, now move it to the dst slab class
+     * 现在往目标slabclass迁移
+     */
+    /* 最后一个萝卜放到空出来的坑里面 */
+    p->slab_list[p->killing - 1] = p->slab_list[p->slabs - 1];
+    p->slabs--;
+    p->killing = 0;
+    /* 在目标slabclass, 把萝卜栽进去, 这里相当于新分配一个页面到目标slabclass */
+    dp->slab_list[dp->slabs++] = slab;
+    dp->end_page_ptr = slab;
+    dp->end_page_free = dp->perslab;
+    /* this isn't too critical, but other parts of the code do asserts to
+     * make sure this field is always 0. 这里再填一次0, 确保后面的东西正常
+     */
+    for (iter = slab; iter < slab_end; (char*)iter += dp->size) {
+        ((item *)iter)->slabs_clsid = 0;
+    }
+    return 1;
+}
+#endif
+```
 
