@@ -280,11 +280,151 @@ thread_init(settings.num_threads, main_base);
 
 ### 多线程的任务分配
 
-子线程自己是不能主动响应客户端请求的, 主线程通知了, 它才会去处理. 所以这里, 我们打算放到[主线程的状态机](Memcached-state-machine#TODO)中来讨论.
+子线程自己是不能主动响应客户端请求的, 主线程通知了, 它才会去处理. 它通过监听
+自己的`notify_send_fd`描述符来获得通知.
+
+分配任务时, 会调用`cqi_new`来创建一个新的`CQ_ITEM`(队列节点), 下面是这个函数
+的源代码
+
+```c
+#define ITEMS_PER_ALLOC 64
+
+/*
+ * Returns a fresh connection queue item.
+ */
+static CQ_ITEM *cqi_new() {
+    CQ_ITEM *item = NULL;
+    /* 闲置资源里面有, 那么优先使用闲置资源 */
+    pthread_mutex_lock(&cqi_freelist_lock);
+    if (cqi_freelist) {
+        item = cqi_freelist;
+        cqi_freelist = item->next;
+    }
+    pthread_mutex_unlock(&cqi_freelist_lock);
+
+    /* 没有闲置资源的情况下, 就需要向系统请求分配, 这里分配也不是
+     * 一个一个分配, 那样太没效率, 我们一次分配ITEMS_PER_ALLOC. 然后把用不完的
+     * 放到闲置资源列表, 以后当闲置资源使用
+     */
+    if (NULL == item) {
+        int i;
+
+        /* Allocate a bunch of items at once to reduce fragmentation */
+        item = malloc(sizeof(CQ_ITEM) * ITEMS_PER_ALLOC);
+        if (NULL == item)
+            return NULL;
+
+        /*
+         * Link together all the new items except the first one
+         * (which we'll return to the caller) for placement on
+         * the freelist.
+         */
+        for (i = 2; i < ITEMS_PER_ALLOC; i++)
+            item[i - 1].next = &item[i];
+
+        /* 然后, 把原来的空闲资源列表放到新的资源列表之后, 作为新的
+         * 闲置资源列表
+         */
+        pthread_mutex_lock(&cqi_freelist_lock);
+        item[ITEMS_PER_ALLOC - 1].next = cqi_freelist;
+        cqi_freelist = &item[1];
+        pthread_mutex_unlock(&cqi_freelist_lock);
+    }
+
+    return item;
+}
+```
+
+当调度函数准备好任务之后, 就将`CQ_ITEM`放到`CQ`里面, 这个功能是通过
+`cq_push`函数来完成的.
+
+```c
+/*
+ * Adds an item to a connection queue.
+ * 把一个新的请求信息压倒队列里
+ */
+static void cq_push(CQ *cq, CQ_ITEM *item) {
+    item->next = NULL;
+
+    pthread_mutex_lock(&cq->lock);
+    if (NULL == cq->tail)
+        cq->head = item;
+    else
+        cq->tail->next = item;
+    cq->tail = item;
+    pthread_cond_signal(&cq->cond);
+    pthread_mutex_unlock(&cq->lock);
+}
+```
+
+对应的, 我们贴上弹出item的代码, 在这个版本的memcached里面, 这个函数实际上
+没有被调用过. 弹出操作是通过`cq_peek`来完成的, 两者的区别在于, `cq_pop`在
+取不到数据的情况下, 会等待条件锁(阻塞到这里了), 而`cq_peek`则会直接跳过
+
+```c
+/*
+ * Waits for work on a connection queue.
+ */
+static CQ_ITEM *cq_pop(CQ *cq) {
+    CQ_ITEM *item;
+
+    pthread_mutex_lock(&cq->lock);
+    while (NULL == cq->head)
+        pthread_cond_wait(&cq->cond, &cq->lock);
+    item = cq->head;
+    cq->head = item->next;
+    if (NULL == cq->head)
+        cq->tail = NULL;
+    pthread_mutex_unlock(&cq->lock);
+
+    return item;
+}
+```
+
+之后通过向pipe写入一字节无意义信息, 触发子线程的监听事件, 这样子线程就知道, 哦, 该去搬砖了.
+
+```c
+/* Which thread we assigned a connection to most recently.
+ * 调度游标, 能保证几个子线程都分到差不多数量的任务
+ */
+static int last_thread = -1;
+
+/*
+ * Dispatches a new connection to another thread. This is only ever called
+ * from the main thread, either during initialization (for UDP) or because
+ * of an incoming connection.
+ */
+void dispatch_conn_new(int sfd, int init_state, int event_flags,
+                       int read_buffer_size, int is_udp) {
+    /* 申请一个新的连接队列节点 */
+    CQ_ITEM *item = cqi_new();
+    /* 这里是调度算法, 很简单, 取余 */
+    int thread = (last_thread + 1) % settings.num_threads;
+
+    last_thread = thread;
+
+    /* 向item写入相应的初始变量 */
+    item->sfd = sfd;
+    item->init_state = init_state;
+    item->event_flags = event_flags;
+    item->read_buffer_size = read_buffer_size;
+    item->is_udp = is_udp;
+
+    /* 把这个连接请求放到队列末尾, 排队去 */
+    cq_push(&threads[thread].new_conn_queue, item);
+    /* 通知线程, 你有活干了, 来搬砖 */
+    if (write(threads[thread].notify_send_fd, "", 1) != 1) {
+        perror("Writing to thread notify pipe");
+    }
+}
+```
 
 ### 多线程工作过程
 
-子线程响应任务, 并从`thread_libevent_process`作为入口开始处理请求. 在这个过程中, 它会到请求连接队列, 获取一个客户连接, 然后响应这个客户的请求.
+子线程响应pipe可读事件(即上文的搬砖通知), libevent库会调用在
+`setup_thread`(由`thread_init`调用)注册给它的`thread_libevent_process`
+函数作为入口开始处理请求. 在这个过程中, 它会到请求连接队列, 获取一个客户连接,
+然后响应这个客户的请求.
 
 `cq_peek`用于从连接队列获取一个客户端请求套接字.
 
@@ -311,8 +451,7 @@ static CQ_ITEM *cq_peek(CQ *cq) {
 
 拿到了这个套接字, 就会调用公用的`conn_new`初始化这个套接字, 这个过程包括
 绑定客户端响应请求(这里会触发`event_handler`函数来处理此套接字后续请求),
-以及初始化缓冲区等一系列初始化, 我们在
-[Memcached响应请求](Memcached-response#TODO)详细讨论.
+以及初始化缓冲区等一系列初始化, 我们在[Memcached响应请求](Memcached-response#TODO)详细讨论.
 
 最后, 当任务完成, 调用`cqi_free`把这个连接请求资源放到可回收列表, 用于再利用.
 我们在`conn_new`里面已经把`item`各项有用的数据复制了一份到返回值, 所以这里删除`item`是安全的, 不会出问题.
@@ -366,3 +505,8 @@ static void thread_libevent_process(int fd, short which, void *arg) {
     }
 }
 ```
+
+注意:
+
+- `CQ`是每个线程独有的
+- `cqi_freelist`是大伙公用的
