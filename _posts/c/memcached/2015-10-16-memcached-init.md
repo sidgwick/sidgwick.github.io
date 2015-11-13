@@ -600,69 +600,11 @@ if (daemonize)
     save_pid(getpid(), pid_file);
 ```
 
-##### 初始化多线程
+### 初始化多线程
 
-```c
-/*
- * Initializes the thread subsystem, creating various worker threads.
- *
- * nthreads  Number of event handler threads to spawn
- * main_base Event base for main thread
- */
-void thread_init(int nthreads, struct event_base *main_base) {
-    int         i;
-    pthread_t   *thread;
+多线程是memcached在1.2.2版本引入的新特性, 我们在
+[Memcached多线程分析](Memcached-threads)有专门的探讨.
 
-    pthread_mutex_init(&cache_lock, NULL);
-    pthread_mutex_init(&conn_lock, NULL);
-    pthread_mutex_init(&slabs_lock, NULL);
-    pthread_mutex_init(&stats_lock, NULL);
-
-    pthread_mutex_init(&init_lock, NULL);
-    pthread_cond_init(&init_cond, NULL);
-
-    pthread_mutex_init(&cqi_freelist_lock, NULL);
-    cqi_freelist = NULL;
-
-    threads = malloc(sizeof(LIBEVENT_THREAD) * nthreads);
-    if (! threads) {
-        perror("Can't allocate thread descriptors");
-        exit(1);
-    }
-
-    threads[0].base = main_base;
-    threads[0].thread_id = pthread_self();
-
-    for (i = 0; i < nthreads; i++) {
-        int fds[2];
-        if (pipe(fds)) {
-            perror("Can't create notify pipe");
-            exit(1);
-        }
-
-        threads[i].notify_receive_fd = fds[0];
-        threads[i].notify_send_fd = fds[1];
-
-    setup_thread(&threads[i]);
-    }
-
-    /* Create threads after we've done all the libevent setup. */
-    for (i = 1; i < nthreads; i++) {
-        create_worker(worker_libevent, &threads[i]);
-    }
-
-    /* Wait for all the threads to set themselves up before returning. */
-    pthread_mutex_lock(&init_lock);
-    init_count++; // main thread
-    while (init_count < nthreads) {
-        pthread_cond_wait(&init_cond, &init_lock);
-    }
-    pthread_mutex_unlock(&init_lock);
-}
-
-/* start up worker threads if MT mode */
- thread_init(settings.num_threads, main_base);
-```
 ### 初始化程序时钟
 
 ```c
