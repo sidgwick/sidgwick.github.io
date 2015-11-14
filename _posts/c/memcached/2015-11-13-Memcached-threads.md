@@ -72,7 +72,7 @@ static pthread_mutex_t cqi_freelist_lock;
 ```
 
 这个结构体可以算是线程池了吧, 不知道这么说准不准确.
-libevent自身并不提供进程间通讯, 所以, 我们需要自己来处理. 这里的处理方法是利用管道通讯, 我找了一篇
+libevent自身并不提供线程间通讯, 所以, 我们需要自己来处理. 这里的处理方法是利用管道通讯, 我找了一篇
 不错的[文章](http://blog.chinaunix.net/uid-23381466-id-1630441.html)
 
 ```c
@@ -122,11 +122,11 @@ static void cq_init(CQ *cq) {
 
 ### 初始化多线程
 
-这里我们会遇到麻烦, libevent不能支持进程间通讯, 所以需要自己实现. 每一个线程都有自己的base event用于处理事件相关的逻辑.
+这里我们会遇到麻烦, libevent不能支持线程间通讯, 所以需要自己实现. 每一个线程都有自己的base event用于处理事件相关的逻辑.
 
 我们先来看, 在线程初始化的`thread_init`会被调用的几个基础函数, 理解这些函数, 有助于理解memcached的多线程实现.
 
-下面这段代码, 实现了各个进程自己的base event.
+下面这段代码, 实现了各个线程自己的base event.
 
 ```c
 /*
@@ -246,7 +246,7 @@ void thread_init(int nthreads, struct event_base *main_base) {
         threads[i].notify_send_fd = fds[1];
 
         /* 执行剩余的设定工作
-         * 主要是libevent相关的, 不支持进程间通讯还真是麻烦啊
+         * 主要是libevent相关的, 不支持线程间通讯还真是麻烦啊
          */
         setup_thread(&threads[i]);
     }
@@ -508,5 +508,15 @@ static void thread_libevent_process(int fd, short which, void *arg) {
 
 注意:
 
-- `CQ`是每个线程独有的
+- `CQ`是每个线程独有的, 调度函数把任务写进去, 线程收到通知, 就会去队列
+  里面取出任务来处理.
 - `cqi_freelist`是大伙公用的
+
+
+### 结束
+
+至此, 多线程的内容基本上已经搞定了, memcached的源码里面还有一部分工作, 是设
+置了一些列的线程安全函数, 做法是封装相应的功能, 在开始操作之前加锁, 功能函数
+完成退出解锁.
+
+关于这部分函数, [这里](Memcached-locks)有一个对照, 帮助理解资源的锁定和锁的粒度.

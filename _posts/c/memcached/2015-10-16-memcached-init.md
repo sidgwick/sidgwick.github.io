@@ -673,6 +673,13 @@ static void delete_handler(const int fd, const short which, void *arg) {
     run_deferred_deletes();
 }
 
+/* returns true if a deleted item's delete-locked-time is over, and it
+   should be removed from the namespace */
+static bool item_delete_lock_over (item *it) {
+    assert(it->it_flags & ITEM_DELETED);
+    return (current_time >= it->exptime);
+}
+
 /* Call run_deferred_deletes instead of this. */
 void do_run_deferred_deletes(void)
 {
