@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Jekyll的基本用法"
+title: "Yii2 AJAX Form Submission"
 date:   2015-08-02 11:28:04
 categories: php yii2
 ---
