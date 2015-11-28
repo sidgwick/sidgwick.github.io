@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Yii2 AJAX Form Submission"
-date:   2015-08-02 11:28:04
+date:   2015-11-28 11:28:04
 categories: php yii2
 ---
 
@@ -29,7 +29,7 @@ request instead of a regular HTTP request. We can do this by listening to
 submitting the form.
 
 ```javascript
-$('body').on('beforeSubmit', ‘form#formId', function () {
+$('body').on('beforeSubmit', 'form#formId', function () {
      var form = $(this);
      // return false if form still have some validation errors
      if (form.find('.has-error').length) {
