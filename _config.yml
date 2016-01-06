@@ -26,6 +26,6 @@ redcarpet:
         - "tables"
         - "space_after_headers"
 
-highlighter: pygments
+highlighter: rb-pygments
 
 permalink: /:categories/:title.html
