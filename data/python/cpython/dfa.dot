@@ -1,0 +1,4 @@
+digraph parsefile {
+    parsefile -> tok_setupf;
+    tok_setupf -> tok_new;
+}
