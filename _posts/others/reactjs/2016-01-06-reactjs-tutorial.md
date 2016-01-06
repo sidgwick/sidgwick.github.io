@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "React基本教程"
-date:   2016-01-06 17:28:04
+date:   2016-01-06 17:28:04+08:00
 categories: others reactjs
 ---
 

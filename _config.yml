@@ -11,6 +11,7 @@ baseurl: ""
 url: "http://sidgwick.github.io"
 # twitter_username: jekyllrb
 github_username:  sidgwick
+timezone: Asia/Shanghai
 
 # Build settings
 markdown: redcarpet
