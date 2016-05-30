@@ -14,19 +14,14 @@ github_username:  sidgwick
 timezone: Asia/Shanghai
 
 # Build settings
-markdown: redcarpet
+markdown: kramdown
 markdown_ext:  markdown,mkdown,mkdn,mkd,md
 
-redcarpet:
-    extensions:
-        - "no_intra_emphasis"
-        - "fenced_code_blocks"
-        - "autolink"
-        - "strikethrough"
-        - "superscript"
-        - "tables"
-        - "space_after_headers"
+kramdown:
+  input: GFM
+  auto_ids: true
+  syntax_highlighter: rouge
 
-highlighter: rb-pygments
+highlighter: rouge
 
 permalink: /:categories/:title.html
