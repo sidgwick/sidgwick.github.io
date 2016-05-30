@@ -306,4 +306,544 @@ var Comment = React.createClass({
 这些标签.
 
 
+## 接入数据模型
+
+到米钱位置, 我们都是直接在源码里面插入数据的. 现在让我们从一个大的JSON里面来渲
+染列表. 最终的JSON数据将会从服务器请求, 现在我们先把他写在代码里面.
+
+```javascript
+// tutorial8.js
+var data = [
+  {id: 1, author: "Pete Hunt", text: "This is one comment"},
+  {id: 2, author: "Jordan Walke", text: "This is *another* comment"}
+];
+```
+
+我们以模块的形式将数据插入到CommentList, 下面修改CommentBox以及
+`ReactDOM.render()`调用, 并把这个数据通过属性传递到CommentList.
+
+```javascript
+// tutorial9.js
+var CommentBox = React.createClass({
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.props.data} />
+        <CommentForm />
+      </div>
+    );
+  }
+});
+
+ReactDOM.render(
+  <CommentBox data={data} />,
+  document.getElementById('content')
+);
+```
+
+现在, 在CommentList里面, data就是可用的了, 下面我们来动态的渲染评论.
+
+```javascript
+// tutorial10.js
+var CommentList = React.createClass({
+  render: function() {
+    var commentNodes = this.props.data.map(function(comment) {
+      return (
+        <Comment author={comment.author} key={comment.id}>
+          {comment.text}
+        </Comment>
+      );
+    });
+    return (
+      <div className="commentList">
+        {commentNodes}
+      </div>
+    );
+  }
+});
+```
+
+差不多就这样了.
+
+## 从服务器获取数据
+
+我们下面用动态从服务器获取的数据换掉硬编码在代码里面的数据. 我们将会移除`data`
+属性并且使用一个URL来替换它.
+
+```javascript
+// tutorial11.js
+ReactDOM.render(
+  <CommentBox url="/api/comments" />,
+  document.getElementById('content')
+);
+```
+
+这个组件和我们之前见到的组件有一点不同, 因为待会它将会渲染它自身. 组件在服务器
+返回数据之前, 不会有任何数据. 请求返回之后, 这个组件可能需要渲染一些新的评论.
+
+> **注意** 这些代码目前无法工作
+
+## 响应状态变化
+
+目前为止, 每个组件依赖于它的属性渲染自己一次. 属性是不可变的: 它们从父组件传递
+过来, "属于"父组件. 为了实现交互, 我们给组件引入了可变的state. `this.state`是
+组件私有的, 可以通过调用`this.setState()`来改变它. 当state更新之后, 组件就会重
+新渲染自己.
+
+`render()`方法依赖于`this.props`和`this.state`, 框架会确保渲染出来的UI界面总是
+与输入(`this.props`和`this.state`)保持一致.
+
+当服务器拿到评论数据的时候, 我们将会用已知的评论数据改变评论. 让我们给
+CommentBox组件添加一个评论数组作为它的state:
+
+```javascript
+// tutorial12.js
+var CommentBox = React.createClass({
+  getInitialState: function() {
+    return {data: []};
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm />
+      </div>
+    );
+  }
+});
+```
+
+`getInitialState()`在组件的生命周期里面只执行一次, 用于初始化组件的state.
+
+### 更新状态
+
+当组件第一次被创建的时候, 我们希望通过GET方法从服务器获得一些JSON数据, 然后
+更新state, 并展示数据. 我们将会使用jQuery发送一个异步请求到我们之前启动好的服
+务器, 获取我们需要的数据. 在我们启动服务器的时候, 数据就已经准备好了(放在
+comments.json文件里面), 数据格式和相应代码看起来会是这个样子:
+
+```javascript
+[
+  {"author": "Pete Hunt", "text": "This is one comment"},
+  {"author": "Jordan Walke", "text": "This is *another* comment"}
+]
+```
+
+```javascript
+// tutorial13.js
+var CommentBox = React.createClass({
+  getInitialState: function() {
+    return {data: []};
+  },
+  componentDidMount: function() {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm />
+      </div>
+    );
+  }
+});
+```
+
+这里, `componentDidMount`是一个在组件第一次加载完成后由React自动调用的方法,
+这里动态更新的关键是调用`this.setState()`方法. 我们使用从服务器得到的新的数组
+来代替原来的空数组, UI会随之自动更新. 有了这种反应机制, 实现实时更新就仅需要一
+小点改动. 在这里我们使用简单的轮询, 但是你也可以很容易地改为使用WebSockets或者
+其他技术.
+
+```javascript
+// tutorial14.js
+var CommentBox = React.createClass({
+  loadCommentsFromServer: function() {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  getInitialState: function() {
+    return {data: []};
+  },
+  componentDidMount: function() {
+    this.loadCommentsFromServer();
+    setInterval(this.loadCommentsFromServer, this.props.pollInterval);
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm />
+      </div>
+    );
+  }
+});
+
+ReactDOM.render(
+  <CommentBox url="/api/comments" pollInterval={2000} />,
+  document.getElementById('content')
+);
+```
+
+我们在这里, 把AJAX请求移到了一个单独的方法里面, 然后在组件第一次加载的时候调用.
+此后, 每隔2秒轮询一次. 你可以试着在你自己的浏览器里面跑一跑这个程序, 改一改
+comments.json, 两秒之后就能看到更新.
+
+## 添加新评论
+
+现在, 是时候构建一个表单了. 我们的CommentForm组件应该向用户询问他的名字以及评
+论内容, 然后向服务器发送一个请求, 来保存评论.
+
+```javascript
+// tutorial15.js
+var CommentForm = React.createClass({
+  render: function() {
+    return (
+      <form className="commentForm">
+        <input type="text" placeholder="Your name" />
+        <input type="text" placeholder="Say something..." />
+        <input type="submit" value="Post" />
+      </form>
+    );
+  }
+});
+```
+
+### controlled组件
+
+使用传统的DOM, 由浏览器执行输入元素的渲染以及状态(即渲染结果)的维护, 结果就是
+真实DOM会和组件有所不同. 因为视图的状态会和组件不同, 所以这并不理想. 在React里
+面, 组件一直是代表视图的状态的, 而并不仅仅是在初始化的时候.
+
+因此, 我们可以使用`this.state`来存储用户的输入, 我们初始化两个属性, 即`author`
+和`text`并把他们设置为空字符串. 在我们的`<input>`元素里面, 我们设定属性值来关联
+到组件的状态 并且把`onChange`事件处理函数与之关联. 这种有一个设定值的`<input>`
+标签叫做`controlled`组件, 你可以在Form章节查到更多信息.
+
+```javascript
+// tutorial16.js
+var CommentForm = React.createClass({
+  getInitialState: function() {
+    return {author: '', text: ''};
+  },
+  handleAuthorChange: function(e) {
+    this.setState({author: e.target.value});
+  },
+  handleTextChange: function(e) {
+    this.setState({text: e.target.value});
+  },
+  render: function() {
+    return (
+      <form className="commentForm">
+        <input
+          type="text"
+          placeholder="Your name"
+          value={this.state.author}
+          onChange={this.handleAuthorChange}
+        />
+        <input
+          type="text"
+          placeholder="Say something..."
+          value={this.state.text}
+          onChange={this.handleTextChange}
+        />
+        <input type="submit" value="Post" />
+      </form>
+    );
+  }
+});
+```
+
+## 事件
+
+React使用驼峰命名约定来向一个组件绑定事件处理函数. 我们把`onChange`处理函数绑
+定到了两个`<input>`标签, 现在, 当用户向`<input>`输入文字的时候, 绑定的处理函数
+就会被触发, 然后组件的state被修改, 最后当前state的修改会被渲染出来.
+
+## 提交表单
+
+现在, 我们修改表单使之可交互. 当用户提交表单的时候, 我们应该向服务器提交请求,
+并清空表单, 然后刷新评论列表. 作为开始, 我们先监听表单的submit事件.
+
+```javascript
+// tutorial17.js
+var CommentForm = React.createClass({
+  getInitialState: function() {
+    return {author: '', text: ''};
+  },
+  handleAuthorChange: function(e) {
+    this.setState({author: e.target.value});
+  },
+  handleTextChange: function(e) {
+    this.setState({text: e.target.value});
+  },
+  handleSubmit: function(e) {
+    e.preventDefault();
+    var author = this.state.author.trim();
+    var text = this.state.text.trim();
+    if (!text || !author) {
+      return;
+    }
+    // TODO: send request to the server
+    this.setState({author: '', text: ''});
+  },
+  render: function() {
+    return (
+      <form className="commentForm" onSubmit={this.handleSubmit}>
+        <input
+          type="text"
+          placeholder="Your name"
+          value={this.state.author}
+          onChange={this.handleAuthorChange}
+        />
+        <input
+          type="text"
+          placeholder="Say something..."
+          value={this.state.text}
+          onChange={this.handleTextChange}
+        />
+        <input type="submit" value="Post" />
+      </form>
+    );
+  }
+});
+```
+
+我们把`onSubmit`处理函数绑定到表单的提交事件上去. 提交后清除表单域.
+`preventDefault()`调用用于阻止浏览器的默认提交动作.
+
+## 把回调当做属性
+
+当用户提交一个评论时, 我们需要刷新评论表以包含新的评论. 因为CommentBox有state
+变量, 这就让这个过程显得很直观了.
+
+我们需要从子组件向父组件传递数据, 我们为父组件的渲染方法增加一个新的回调函数
+(handleCommentSubmit), 并在子组件里面把它绑定到`onCommentSubmit`事件以调用它.
+当这个事件被触发以后, 回调就会被调用
+
+```javascript
+// tutorial18.js
+var CommentBox = React.createClass({
+  loadCommentsFromServer: function() {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  handleCommentSubmit: function(comment) {
+    // TODO: submit to the server and refresh the list
+  },
+  getInitialState: function() {
+    return {data: []};
+  },
+  componentDidMount: function() {
+    this.loadCommentsFromServer();
+    setInterval(this.loadCommentsFromServer, this.props.pollInterval);
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm onCommentSubmit={this.handleCommentSubmit} />
+      </div>
+    );
+  }
+});
+```
+
+当用户提交表单的时候, 我们在CommentForm组件里面调用这个回调:
+
+```javascript
+// tutorial19.js
+var CommentForm = React.createClass({
+  getInitialState: function() {
+    return {author: '', text: ''};
+  },
+  handleAuthorChange: function(e) {
+    this.setState({author: e.target.value});
+  },
+  handleTextChange: function(e) {
+    this.setState({text: e.target.value});
+  },
+  handleSubmit: function(e) {
+    e.preventDefault();
+    var author = this.state.author.trim();
+    var text = this.state.text.trim();
+    if (!text || !author) {
+      return;
+    }
+    this.props.onCommentSubmit({author: author, text: text});
+    this.setState({author: '', text: ''});
+  },
+  render: function() {
+    return (
+      <form className="commentForm" onSubmit={this.handleSubmit}>
+        <input
+          type="text"
+          placeholder="Your name"
+          value={this.state.author}
+          onChange={this.handleAuthorChange}
+        />
+        <input
+          type="text"
+          placeholder="Say something..."
+          value={this.state.text}
+          onChange={this.handleTextChange}
+        />
+        <input type="submit" value="Post" />
+      </form>
+    );
+  }
+});
+```
+
+现在回调已经就位, 我们下面要做的, 就是把数据提交到服务器, 并更新列表
+
+```javascript
+// tutorial20.js
+var CommentBox = React.createClass({
+  loadCommentsFromServer: function() {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  handleCommentSubmit: function(comment) {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      type: 'POST',
+      data: comment,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  getInitialState: function() {
+    return {data: []};
+  },
+  componentDidMount: function() {
+    this.loadCommentsFromServer();
+    setInterval(this.loadCommentsFromServer, this.props.pollInterval);
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm onCommentSubmit={this.handleCommentSubmit} />
+      </div>
+    );
+  }
+});
+```
+
+## 优化: 优化更新
+
+我们的列表现在已经OK了, 但是它必须等到数据从服务器返回数据才会更新列表, 所以
+看上去会有点慢. 沃恩可以把这个评论添加到列表好让我们的app看上去更快些.
+
+```javascript
+// tutorial21.js
+var CommentBox = React.createClass({
+  loadCommentsFromServer: function() {
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  handleCommentSubmit: function(comment) {
+    var comments = this.state.data;
+    // Optimistically set an id on the new comment. It will be replaced by an
+    // id generated by the server. In a production application you would likely
+    // not use Date.now() for this and would have a more robust system in place.
+    comment.id = Date.now();
+    var newComments = comments.concat([comment]);
+    this.setState({data: newComments});
+    $.ajax({
+      url: this.props.url,
+      dataType: 'json',
+      type: 'POST',
+      data: comment,
+      success: function(data) {
+        this.setState({data: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        this.setState({data: comments});
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+  getInitialState: function() {
+    return {data: []};
+  },
+  componentDidMount: function() {
+    this.loadCommentsFromServer();
+    setInterval(this.loadCommentsFromServer, this.props.pollInterval);
+  },
+  render: function() {
+    return (
+      <div className="commentBox">
+        <h1>Comments</h1>
+        <CommentList data={this.state.data} />
+        <CommentForm onCommentSubmit={this.handleCommentSubmit} />
+      </div>
+    );
+  }
+});
+```
+
+**恭喜你!**
+
+经过上面一系列步骤, 你已经成功的创建了一个可用的评论框. 下面请继续学习更多关于
+react的使用方法, 你也可以通过阅读API手册来hack. 祝你好运
+
 [source code package]: https://github.com/reactjs/react-tutorial/archive/master.zip
