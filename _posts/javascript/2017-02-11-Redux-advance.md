@@ -126,17 +126,17 @@ function applyMiddleware(...middlewares) {
 
 首先, `applyMiddleware` 接受一系列的 `middleware`, 这个调用返回了一个闭包函数,
 然后这个闭包函数又返回了一个闭包函数, 这两次的操作目地是一样的, 就是能让最后返回
-的这个闭包函数访问到前两个闭包函数传进来的参数, 最后这个闭包函数的形式实际上和
+的这个闭包函数访问到前两个函数传进来的参数, 最后这个闭包函数的形式实际上和
 `createStore` 函数一样.
 
-假设我们在调用 `applyMiddleware` 函数的时候传进来了一些列的中间件, 然后调用返回的
+假设我们在调用 `applyMiddleware` 函数的时候传进来了一些中间件, 然后调用返回的
 闭包函数时, 传入的是 Redux 的 `createStore` 函数, 最后一次闭包函数调用,
 传入的是与上面示例代码里面传给 `createStore` 一样的参数(实际上会把中间件那部分参数去掉).
 
 那么, 在最里层的函数里面, 我们可以访问中间件数组, `createStore` 函数, 以及
 `reducers` 和 `initialState`. 在这个函数里, 我们调用 `createStore` 来创建一个
-`store`, 之后创建一个中间件调用半成品数组, 这个半成品是接受 `next dispatch` 函数的闭包函数,
-然后把这个数组交给后面的 `compose` 函数进一步处理.
+`store`, 之后创建一个中间件调用半成品数组, 这个半成品是接受 `next dispatch`
+函数的闭包函数, 然后把这个数组交给后面的 `compose` 函数进一步处理.
 
 ```javascript
 function compose(...funcs) {
@@ -159,7 +159,8 @@ function compose(...funcs) {
 `reduceRight` 操作, 这个操作的结果就是, `funcs` 数组里面的函数, 从右向左, 一次调用,
 最后那次调用的参数是这个闭包函数接受的那个 `args` 数组. 由于每个 `middleware` 半成品函数
 接受的是上一个中间件修改过的 `dispatch` 函数(或者是第一个中间件接受原生的 `dispatch`),
-这么一处理, 就很巧秒的实现了中间件调用中间件在调用中间件....这样的调用链.
+返回的是自己修改过的具有增强功能的 `dispatch` 函数. 这么一处理, 就很巧秒的实现了中间件
+调用中间件在调用中间件....这样的调用链.
 
 搞明白 `applyMiddleware` 的调用过程之后, 再来看看 `createStore` 内部是是如何调用
 `applyMiddleware` 的.
