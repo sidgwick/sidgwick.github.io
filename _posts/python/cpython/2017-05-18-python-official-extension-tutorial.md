@@ -55,3 +55,87 @@ spam_system(PyObject *self, PyObject *args)
 
 `PyArg_ParseTuple` 在所有参数无误, 并且都被正确的转化为对应的 C 值的时候, 会返回非 0. 在参数类型有误的情况下会返回 0, 在这种情况中, 它也会触发一个异常, 所以调用函数立即返回 `NULL`. (在 Python 解释器收到 `NULL` 的时候, 它就知道有一个异常被抛出了)
 
+## 插曲: 错误和异常
+
+一个很重要的贯穿整个 Python 解释器的约定是: 当一个函数执行失败, 它应当设定一个异常条件并且返回一个错误值(通常是 `NULL`). 异常保存在一个解释器的静态全局变量里面, 当这个变量是 `NULL` 标识没有异常发生, 第二个全局变量是保存异常"相关值"的(the second argument to raise, 我没理解是raise的那个参数...). 第三个全局变量是, 保存 Python 代码里面的异常调用栈. 这三个变量, 相当于 Python 代码执行 `sys.exc_info()`. 理解这些变量对理解如何传递错误是很重要的.
+
+Python 的 API 定义了一系列的函数, 来定义异常类型.
+
+最常见的就是 `PyErr_SetString` 函数, 它的参数是异常对象和 C 字符串, 异常对象总是一个预定义好的对象, 比如: `PyExc_ZeroDivisionError`, C 字符串用来说明发生错误的原因, 并且会被转化为 Python 字符串, 保存在异常"相关值"那个变量里面.
+
+
+另一个有用的函数是 `PyErr_SetFromErron`, 它接受一个异常参数, 然后通过全局的 `errno` 变量来构造"相关值". 最通用的函数是 `PyErr_SetObject`, 他接受两个参数,  一个异常加一个相关值, 对这些函数传入的参数, 不需要对他们施行 `Py_INCREF` 操作.
+
+可以使用 `PyErr_Occurred()` 函数来执行非破坏性的检查操作, 这个函数返回当前的异常对象, 如果没有异常发生, 他就返回 `NULL`. 因为多数情况下, 你可以从返回值来判断是不是有异常发生, 所以你基本上不怎么需要调用这个函数.
+
+当一个函数 `f` 调用了 `g`, 而 `g` 发生了异常, `f` 也应当返回一个错误值(通常情况是 `NULL` 或者 -1). 它不能调用 `PyErr_*()` 函数, 因为 `g` 已经调用过了. 调用 `f` 的函数, 也应该向它的调用函数返回一个错误标记, 一样也不需要调用 `PyErr_*()`, 如此一致往前. 错误的详细信息已经在第一次探测到他的地方被详细报告了. 当错误到达 Python 解释器主循环的时候, 就会打断当前的执行代码, 并且尝试着查找由 Python 程序员编写的异常处理.
+
+有些情况下, 模块可以调用 `PyErr_*()` 来给出更详细的错误信息, 这种情况是可以的. 但是作为一个通用的规则, 这个调用不是必需的, 并且可能会导致造成错误的信息丢失, 因为很多操作会因为各种原因导致失败
+
+要忽略一个失败函数调用产生的异常, 我们必须显式的调用 `PyErr_Clear` 函数来清除异常数据. C 代码里面, 唯一需要调用这个函数的情况是, 当我们不希望向 Python
+解释器传递这个异常, 而是打算自己处理这个异常(比方说, 尝试其他东西, 或者直接忽略掉异常)
+
+每次调用 `malloc()` 失败, 都应该转化成一个异常, 直接调用 `malloc()` 或者 `realloc()` 的函数, 必须调用 `PyErr_NoMemory()` 并返回失败. 所有的对象创建函数(比如: `PyLong_FromLong`)都已经做了这种操作, 所以这个提醒是给那些直接调用内存分配函数的地方的.
+
+注意, `PyArg_ParseTuple` 函数和类似的函数, 这些函数会犯回一个正数或者 `0` 来标识执行成功, 返回 `-1` 来表示执行失败. 就像 Unix 系统调用那样.
+
+最后, 再犯会错误值的时候, 要小心垃圾清理工作(通过对对象调用`Py_XDECREF` 或者 `Py_DECREF`)
+
+应该抛出那个异常, 完全有你来决定, 对所有的内置异常类型都有对应的预定义 C 对象, 比如像 `PyExc_ZeroDivisionError`, 这种你可以直接使用. 当然你应该选择明确的异常类型, 不要把 `PyExc_TypeError` 用来标识文件无法打开, 那明明就是 `PyExc_IOError` 嘛. 如果你的传参不对, `PyArg_ParseTuple` 函数一般会抛出 `PyExc_TypeError`. 如果你的参数值, 应该是莫个范围, 或者要满足某些条件, `PyExc_ValueError` 会更合适.
+
+你也可以给你的模块定义一个新的异常, 可以通过在文件开始声明一个静态的对象变量来实现:
+
+```c
+static PyObject *SpamError;
+```
+
+之后在模块初始化函数里面, 用一个异常对象初始化它(现在我们先忽略错误检查).
+
+```c
+PyMODINIT_FUNC
+PyInit_spam(void)
+{
+  PyObject *m;
+
+  m = PyModule_Create(&spammodule);
+  if (m == NULL) {
+    return NULL;
+  }
+
+  SpamError = PyErr_NewException("spam.error", NULL, NULL);
+  Py_INCREF(SpamError);
+  PyModule_AddObject(m, "error", SpamError);
+
+  return m;
+}
+```
+
+请注意, 异常的 Python 名称是 `spam.error`. `PyErr_NewException` 函数可以基于基 Exception 类创建新对象(除非另外又传进来一个非 `NULL` 的类), Python 的内战异常文档里有对基异常类相关的描述.
+
+注意 `SpamError` 保留了一个新创键对象的引用, 这是有意而为之的. 应为异常可能会被外部代码删掉, 所以又有一个对这个类的引用可以确保他不会被删掉, 保证了
+`SpamError` 不会成为悬挂指针(野指针). 如果它成了一个野指针, C 代码就会生成 `core dump` 错误或者其他未维护的副作用.
+
+在问找稍后会介绍 `PyMODINIT_FUNC` 这种函数返回类型.
+
+之后, `SpamError` 就可以和 `PyErr_SetString` 函数一起使用了, 向下面这样:
+
+```c
+static PyObject *
+spam_system(PyObject *self, PyObject *args)
+{
+  char *command;
+  int sts;
+
+  if (!PyArg_ParseTuple(args, "s", &command)) {
+    return NULL;
+  }
+
+  sts = system(command);
+  if (sys < 0) {
+    PyErr_SetString(SpamError, "System command filed");
+    return NULL;
+  }
+
+  return PyLong_FromLong(sts);
+}
+```
