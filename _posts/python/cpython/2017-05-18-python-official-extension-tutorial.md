@@ -139,3 +139,32 @@ spam_system(PyObject *self, PyObject *args)
   return PyLong_FromLong(sts);
 }
 ```
+
+## 继续例子
+
+现在, 我们回到代码. 你应该能理解下面的函数什么意思了:
+
+
+```c
+if (!PyArg_ParseTuple(args, "s", &command))
+    return NULL;
+```
+
+如果在参数列表里面找到错误, 那么它就会返回 `NULL`, 异常是由 `PyArg_ParseTuple` 函数设置的. 如果没有错误, 参数就会被拷贝到本地的 `command` 变量里面这是一个指针赋值, 并且你不应该尝试着取改变指针指向的内容. 在 C 里面, 可以声明为 `const char *command`.
+
+下一个语句是, 把我们从 `PyArg_ParseTuple` 函数获取到的参数, 传递进 Unix 系统调用 `system` 里面去.
+
+```c
+sts = system(command);
+```
+
+我们的 `spam.system()` 应该返回 Python 对象类型, 所以使用 `PyLong_FromLong()` 函数来生成一个长整型的 Python 数字.
+
+如果你的某个 C 函数, 不需要返回值(返回 `viod`). 那么对应的 Python 函数必须返回 `None`. 可以使用用下面这段代码做到(有一个 `Py_RETRUN_NONE` 宏来做这个事).
+
+```c
+Py_INCREF(Py_None);
+return Py_None;
+```
+
+`Py_None` 是 Python 特殊对象 `None` 的 C 名称. 这个名称和 `NULL` 不同, `NULL` 表示发生了错误.
