@@ -168,3 +168,75 @@ return Py_None;
 ```
 
 `Py_None` 是 Python 特殊对象 `None` 的 C 名称. 这个名称和 `NULL` 不同, `NULL` 表示发生了错误.
+
+## 模块方法表和初始化函数
+
+我说过会详细解释 `spam_system()` 函数是如何在 Python 代码里面调用的. 首先, 我们需要把函数的名字和地址列到方法表里面.
+
+```c
+static PyMethodDef SpamMethods[] = {
+  {"system", spam_syatem, METH_VARGARS, "Execute a shell command."},
+  {NULL, NULL, 0, NULL} /* sentinel */
+};
+```
+
+请注意第三个 `METH_VARGARS`, 这个标记告诉 Python 解释器调用转换用于 C 函数. 这个值总应该是 `METH_VARGARS` 或者 `METH_VARGARS | METH_KEYWORDS`. 传 `0` 意味着是一个 `PyArg_ParseTuple` 变体(这段不知道怎么组织语句, 我自己大概理解了, 下面保留原文).
+
+Note the third entry (`METH_VARARGS`). This is a flag telling the interpreter the calling convention to be used for the C function. It should normally always be `METH_VARARGS` or `METH_VARARGS | METH_KEYWORDS`; a value of 0 means that an obsolete variant of `PyArg_ParseTuple()` is used.
+
+当使用 `METH_VARGARS` 的时候, 函数应该将 "Python级别" 的参数转换为一个 `PyArg_ParseTuple` 可以接受的元组, 关于这个函数的更多信息, 我们在下面详细描述.
+
+如果想要向函数传递关键字参数, 那么应当设置 `METH_KEYWORDS` 位. 在这种情况下, C 函数接受一个 `PyObject *` 关键字字典对象, 应该使用 `PyArg_ParseTupleAndKeywords()` 函数来解析这种参数.
+
+在模块定义结构中, 必须有对方法表的引用:
+
+```c
+static struct PyModuleDef spammodule = {
+   PyModuleDef_HEAD_INIT,
+   "spam",   /* name of module */
+   spam_doc, /* module documentation, may be NULL */
+   -1,       /* size of per-interpreter state of the module,
+                or -1 if the module keeps state in global variables. */
+   SpamMethods
+};
+```
+
+这个结构体, 又必须传送给解释器的模块创建函数, 模块初始化函数必须命名为 `PyInit_name` 这样, `name` 是模块的名字, 并且应该在模块文件里面定义为 `non-static` 的(C 基础, 定义为 `static` 的在文件外部是不可见的, 这个是模块入口, 显然不能定义成 `static` 的).
+
+```c
+PyMODINIT_FUNC
+PyInit_spam(void)
+{
+    return PyModule_Create(&spammodule);
+}
+```
+
+`PyMODEINIT_FUNC` 声明这个函数返回类型是 `PyObject *` 的, 它还做了一些关于平台要求的特殊链接的声明, 以及 C++ 的声明函数为 `ectern "C"`.
+
+当 Python 程序员第一次引入 `spam` 模块, `PyInit_spam` 就会被调用(参看下面关于内嵌 python 的论述). 这个函数调用 `PyModule_Create`, 这个函数返回一个模块对象. 它根据模块里面定义的方法表(`PyMethodDef` 结构体数组)把内置函数对象插入到新创建的模块上去, 然后返回刚刚创建的这个模块对象的指针. 它可能会因为创建错误而产生致命错误, 或者因为无法圆满的创建模块而返会 `NULL`. 初始化函数必须向它的调用者返回创建的模块对象, 调用者会把对象插入到 `sys.models` 里面去.
+
+当内嵌 Python 的时候, `PyInit_spam` 函数除非在 `PyImport_Inittab` 表里面有一个入口, 否则不会自动的被调用. 要把一个模块插入到初始表里面, 使用 `PyImport_AppendInittab` 函数, 跟上一个可选的模块导入语句.
+
+> 在同一个线程里面, 从 `sys.module` 里面移除或者引入编译模块给多个解释器(或者后面跟着使用 `fork` 函数而没有使用 `exec` 函数), 可能会导致问题. 模块作者在初始某块结构的时候要小心谨慎.
+
+Python 源码里面的 `Modules/xxxmodule.c` 是很翔实的某块例子. 这些代码用来阅读学习或者作为模板很不错.
+
+> Note Unlike our `spam` example, `xxmodule` uses multi-phase initialization (new in Python 3.5), where a `PyModuleDef` structure is returned from `PyInit_spam`, and creation of the module is left to the import machinery. For details on multi-phase initialization, see PEP 489.
+
+## 编译与链接
+
+开始使用你的模块之前, 有个重要的工作要做: 编译并链接到 Python 系统. 如果你使用动态链接, 那么连接的细节会和你使用的系统的动态链接方式有关系, 更多的可以去查看本文档[编译相关的章节](https://docs.python.org/3.6/extending/building.html#building)
+
+如果你不使用动态链接, 或者想把你的扩展做成 Python 解释器的一部分, 那么你要修改解释器的配置, 并重新编译它. 所幸的是, 在 Unix 上做这些工作很容易, 只要把你的模块文件放到 Modules 文件夹下, 然后解压缩源代码, 并在 `Modules/Setup.local` 文件里面添加一行代码:
+
+```
+spam spammodule.o
+```
+
+之后, 在 Python 解释器的顶层文件里面执行 `make` 就好了. 你也可以在 Modules 文件夹里面执行 `make`, 但是你必须先通过 `make Makefile` 构建这里的 `Makefile`. 这个步骤在你改变了 `Setup.local` 文件之后, 是必须执行的.
+
+如果你的模块连接了其他库, 那么这些库可以在配置文件统一行后面给加上:
+
+```
+spam spammodule.o -lX11
+```
