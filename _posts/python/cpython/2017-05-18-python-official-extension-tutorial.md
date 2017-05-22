@@ -240,3 +240,104 @@ spam spammodule.o
 ```
 spam spammodule.o -lX11
 ```
+
+## 在C代码里面调用Python函数
+
+目前为止, 我们注意力都集中在从 Python 代码里调用 C 函数. 反过来, 从 C 里面调用 Python 也是很有用的. 特别是在一些支持所谓的回调的库里面. 如果一个 C 接口使用了回调, Python 就需要向 Python 程序员提供一种回调机制. 实现上需要能够在 C 的回调代码里面, 调用 Python 程序提供的回调函数. 你也可以想象其他的应用场景.
+
+幸运的是, Python 解释器很容易被递归调用, 调用 Python 接口也有一套标准的接口. 这里我不想细说如如何从一个原始字符串调用 Python 解释器, 如果你感兴趣的话, 可以看一看 `Modules/main.c` 的 `-c` 命令行选项的实现.
+
+调用 Python 函数是很容易的. 首先, Python 程序员必须通过某种方式, 传递给你 Python 函数对象, 你应该提供一个函数(或者其他的接口)来完成这项工作. 当函数被调用的时候, 就在全局变量(或者你觉得合适的地方)里面保存一个指向 Python 函数对象的指针(要小心地对它使用 `Py_INCREF`). 作为例子, 下面的代码可作为模块定义的一部分.
+
+```c
+static PyObject *my_callback = NULL;
+
+static PyObject *
+set_my_callback(PyObject *dummy, PyObject *args)
+{
+  PyObject *tmp;
+  PyObject *result = NULL;
+
+  if (!PyArg_ParseTuple(args, "O:set_callback", &tmp)) {
+    return NULL;
+  }
+
+  if (!PyCallable_Check(tmp)) {
+    PyErr_SetString(PyExc_TypeError, "parameter mast be callable.");
+    return NULL;
+  }
+
+  Py_XINCREF(tmp);         /* Add a reference to new callback */
+  Py_XDECREF(my_callback); /* Dispose of previous callback */
+  my_callback = tmp;       /* Remember new callback */
+
+  /* Boilerplate to return "None" */
+  Py_INCREF(Py_None);
+  result = Py_None;
+
+  return result;
+}
+```
+
+这个函数在向解释器注册的时候, 必须使用 `METH_VARGARS` 方式. 这个方式在"模块方法表和初始化函数"一节已经介绍过了. `PyArg_ParseTuple()` 函数和它的参数相关文档在 [Extracting Parameters in Extension Functions](http://#)
+
+`Py_XINCREF()` 和 `Py_XDECREF()` 宏用来增加/减少对象的引用计数, 他们用在 `NULL` 指针上也是安全的(但是请注意这里的上下文中, `tmp` 指针不可能是空). 更多关于这两个宏的信息请参考相关文档.
+
+最后, 当要调用 Python 函数的时候, 使用 C 函数 `PyObject_CallObject()`. 这个函数接受两个参数, 都指向任意 Python 对象: Python 函数, 还有 Python 参数列表. 参数列表必须是一个元组对象, 长度就是参数的个数. 如果希望不带参数调用 Python 函数, 那么, 参数列表对象就传空值, 或者传一个空的元组对象. 要以一个参数调用它, 传一个单元素元组. 当传给 `Py_BuildValue()` 函数的格式化字符串里面有以括号扩起来的零个或多个格式化元素时, 它会返回一个元组. 比如像下面这样:
+
+```c
+int arg;
+PyObject *arglist;
+PyObject *result;
+...
+arg = 123;
+...
+/* Time to call the callback */
+arglist = Py_BuildValue("(i)", arg);
+result = PyObject_CallObject(my_callback, arglist);
+Py_DECREF(arglist);
+```
+
+`PyObject_CallObject()` 返回一个 指向 Python 函数返回值的 Python 对象指针, `PyObject_CallObject()` 函数对它的参数是所谓的 reference-count-neutral 的. 在例子里面, 会创建一个新的元组作为参数列表传入, 所以后面马上调用 `Py_DECREF()` 处理了一下.
+
+`PyObject_CallObject()` 的返回值是"新的", 要么它是一个全新的对象, 要么就是一个已经存在了的引用数加一的对象. 因此, 除非你想把它作为一个全局对象, 否则即便你对返回值不感兴趣, 你也应该对它设法调用 `Py_DECREF()`
+
+做上面这些处理之前, 检查返回值是不是 `NULL` 是很重要的. 如果是的话, 那 Python 函数就是被抛出的异常打断的. 如果调用 `PyObject_CallObject` 的 C 代码是从Python 里面调用的, 那么它应该返回一个错误来通知它的 Python 调用者, 然后解释器就会打印调用栈, 或者调用处理这个异常的 Python 代码. 如果不想网这么做, 或者无法实现, 产生的异常应该调用 `PyErr_Clear()` 函数清除. 比如:
+
+```c
+if (result == NULL)
+    return NULL; /* Pass error back */
+...use result...
+Py_DECREF(result);
+```
+
+根据希望使用的 Python 回调函数接口, 你也可以向 `PyObject_CallObject` 提供一个参数列表, 一些情况下, 参数列表也可以由 Python 程序员通过规定了回调函数的接口提供. 之后参数列表可以被保存或者作为 Python 对象使用. 在其他情况下, 你可能需要自己构建新的元组作为参数列表. 最简单的方式就是调用 `Py_BuildValue` 函数. 比如说, 我们希望传递一个整型事件码, 可以使用下面的代码:
+
+```c
+PyObject *arglist;
+...
+arglist = Py_BuildValue("(l)", eventcode);
+result = PyObject_CallObject(my_callback, arglist);
+Py_DECREF(arglist);
+if (result == NULL)
+    return NULL; /* Pass error back */
+/* Here maybe use the result */
+Py_DECREF(result);
+```
+
+请注意, `Py_DECREF(arglist)` 调用发生在调用完成之后, 错误检查之前. 严格来说, 这段代码并不完整, `Py_BuildValue` 可能会因为内存不够用而返会失败, 这应该要检查.
+
+你也可以使用 `PyObject_Call` 函数通过关键字参数来调用函数, 这个函数支持参数和关键字参数, 还以上面的例子, 我们使用 `Py_BuildValue` 来创建一个字典.
+
+```c
+PyObject *dict;
+...
+dict = Py_BuildValue("{s:i}", "name", val);
+result = PyObject_Call(my_callback, NULL, dict);
+Py_DECREF(dict);
+if (result == NULL) {
+    return NULL; /* Pass error back */
+}
+/* Here maybe use the result */
+Py_DECREF(result);
+```
