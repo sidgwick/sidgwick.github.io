@@ -341,3 +341,74 @@ if (result == NULL) {
 /* Here maybe use the result */
 Py_DECREF(result);
 ```
+
+## 在扩展函数里面取得参数
+
+`PyArg_ParseTuple` 函数具有一下定义:
+
+```c
+int PyArg_ParseTuple(Pyobject *arg, const char *format, ...);
+```
+
+`arg` 参数必须是一个包含了从 Python 传送给 C 函数参数元素的元组对象. `format` 参数一定要是一个字符串, 它的语法在文档的[解析参数和构建值](https://docs.python.org/3/c-api/arg.html#arg-parsing)章节有解释(whose syntax is explained in Parsing arguments and building values in the Python/C API Reference Manual). 余下的参数, 应该是格式化字符串里面对应的类型对象的地址.
+
+> 请注意 `PyArg_ParseTuple()` 函数检测 Python 参数具有要求的的类型, 但是它不能检测传递给它的 C 变量地址的有效性, 所以, 如果你在这里犯错误, 那么你的成活可能会崩溃, 或者最少会在内存里面写一些无意义的字节. 所以请小心.
+
+> 请注意所有提供给调用者的 Python 对象, 都是所谓的"借用引用(borrowed references)", 所以不要自行减少他们的引用数量.
+
+下面是一些示例代码:
+
+```c
+#define PY_SIZE_T_CLEAN /* Make "s#" use Py_ssize_t rather than int. */
+#include <Python.h>
+
+int ok;
+int i, j;
+long k, l;
+const char *s;
+Py_ssize_t size;
+
+/* no arguments */
+/* Python call: f() */
+ok = PyArg_ParseTuple(args, "");
+
+/* a string */
+/* python call: f('hello world') */
+ok = PyArg_ParseTuple(args, "s", &s);
+
+/* two longs and a string */
+/** python call: f(1, 2, 'three') */
+ok = PyArg_ParseTuple(args, "lls", &k, &l, &s);
+
+/* A pair of ints and a string, whose size is also returned */
+/* Possible Python call: f((1, 2), 'three') */
+ok = PyArg_ParseTuple(args, "(ii)s#", &i, &j, &s, &size);
+
+{
+  const char *file;
+  const char *mode = "r";
+  int bufsize = 0;
+
+  /* A string, and optionally another string and an integer */
+  /* Possible Python calls:
+     f('spam')
+     f('spam', 'w')
+     f('spam', 'wb', 100000) */
+  ok = PyArg_ParseTuple(args, "s|si", &file, &mode, &bufsize);
+}
+{
+  int left, top, right, bottom, h, v;
+
+  /* A rectangle and a point */
+  /* Possible Python call:
+     f(((0, 0), (400, 300)), (10, 10)) */
+  ok = PyArg_ParseTuple(args, "((ii)(ii))(ii)", &left, &top, &right, &bottom, &h, &v);
+}
+{
+  Py_complex c;
+
+  /* a complex, also providing a function name for errors */
+  /* Possible Python call: myfunction(1+2j) */
+  ok = PyArg_ParseTuple(args, "D:myfunction", &c);
+}
+```
