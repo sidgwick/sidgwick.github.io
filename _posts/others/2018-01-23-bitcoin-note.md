@@ -1,4 +1,9 @@
-# 比特币科普
+---
+layout: post
+title:  "比特币科普"
+date:   2018-01-23 20:28:04
+categories: others
+---
 
 ## 历史
 
