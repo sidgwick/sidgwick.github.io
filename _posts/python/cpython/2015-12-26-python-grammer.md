@@ -8,8 +8,6 @@ tags: python cpython
 
 <!--more-->
 
-{% dotf _posts/python/cpython/graph/grammer.dot %}
-
 源码:
 
 ```c
@@ -118,4 +116,4 @@ digraph grammer {
 
 效果如下:
 
-![](/data/python/cpython/grammer.dot.svg)
+{% dotf graph/grammer.dot %}

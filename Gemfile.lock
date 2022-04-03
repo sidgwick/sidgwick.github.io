@@ -1,5 +1,6 @@
-PATH
-  remote: jekyll-graphviz
+GIT
+  remote: https://github.com/sidgwick/jekyll-graphviz.git
+  revision: d448751547e04a1ca495c262c3c9bd3a37cead6e
   specs:
     jekyll-graphviz (0.1.0)
 
