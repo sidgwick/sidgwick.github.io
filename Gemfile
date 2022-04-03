@@ -1,4 +1,4 @@
-source "https://rubygems.org"
+source "https://gems.ruby-china.com/"
 
 #gem "rexml", ">= 3.2.5"
 gem "jekyll-text-theme"

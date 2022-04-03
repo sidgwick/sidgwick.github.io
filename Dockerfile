@@ -4,7 +4,8 @@ RUN apt-get update -q \
   && apt-get clean \
   && rm -rf /var/lib/apt
 RUN gem sources --add https://gems.ruby-china.com/ --remove https://rubygems.org/ \
-  && gem install jekyll bundler \
+  && gem install jekyll \
   && gem update --system
-#ENTRYPOINT ["jekyll", "build"]
-ENTRYPOINT ["bin/bash"]
+WORKDIR /blog
+ENTRYPOINT ["/bin/bash", "bootstrap.sh"]
+# ENTRYPOINT ["bin/bash"]
