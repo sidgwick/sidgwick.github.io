@@ -1,3 +1,8 @@
+PATH
+  remote: jekyll-graphviz
+  specs:
+    jekyll-graphviz (0.1.0)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -98,6 +103,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  jekyll-graphviz!
   jekyll-text-theme
   tzinfo-data
 

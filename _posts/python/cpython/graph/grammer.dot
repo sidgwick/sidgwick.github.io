@@ -1,0 +1,73 @@
+digraph grammer {
+    node[shape=record];
+    rankdir = LR;
+    ranksep = 0.8;
+
+    grammer[label = "
+        <g_ndfas> g_ndfas |
+        <g_dfa> *g_dfa |
+        <g_ll> g_ll |
+        <g_start> g_start |
+        <g_accel> g_accel
+    ", xlabel = "grammer"];
+
+    dfa[label = "
+        <d_type> d_type |
+        <d_name> *d_name |
+        <d_initial> d_initial |
+        <d_nstates> d_nstates |
+        <d_state> *d_state |
+        <d_first> d_first
+    ", xlabel = "dfa"];
+
+    state[label="
+        <s_narcs> s_narcs |
+        <s_arc> *s_arc |
+        <s_lower> s_lower |
+        <s_upper> s_upper |
+        <s_accel> *s_accel |
+        <s_accept> s_accept
+    ", xlabel = "state"];
+
+    arc[label="
+        <a_lbl> a_lbl |
+        <a_arrow> a_arrow
+    ", xlabel = "arc"];
+
+    labellist[label="
+        <ll_nlabels> ll_nlabels |
+        <ll_label> *ll_label
+    ", xlabel = "labellist"];
+
+    label[label="
+        <lb_type> lb_type |
+        <lb_str> *lb_str
+    ", xlabel = "label"];
+
+    // tok_state
+    tok_state[label="
+        <buf> *buf |
+        <cur> *cur |
+        <inp> *inp |
+        <end> *end |
+        <done> done |
+        <fp> *fp |
+        <tabsize> tabsize |
+        <indent> indent |
+        <indstack> *indstack |
+        <atbol> atbol |
+        <pendin> pendin |
+        <prompt> *prompt |
+        <nextprompt> *nextprompt |
+        <lineno> lineno
+    ", xlabel = "tok_state"];
+
+    // 现在把结构体关联起来
+    grammer:g_dfa->dfa:n;
+    grammer:g_ll->labellist:n;
+
+    dfa:d_state->state:n;
+    state:s_arc->arc:n;
+
+    labellist:ll_label->label:n;
+}

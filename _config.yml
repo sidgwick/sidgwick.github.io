@@ -89,6 +89,10 @@ mermaid: # false (default), true
 ## Chart
 chart: # false (default), true
 
+graphviz:
+  options: "-Tsvg" # 'dot' command option
+  command: "dot" # execute this string. specify full path to 'dot' if you need
+
 ## => Paginate
 ##############################
 paginate: 8

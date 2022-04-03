@@ -8,6 +8,8 @@ tags: python cpython
 
 <!--more-->
 
+{% dotf _posts/python/cpython/graph/grammer.dot %}
+
 源码:
 
 ```c
