@@ -1,5 +1,6 @@
 source "https://rubygems.org"
 
+#gem "rexml", ">= 3.2.5"
 gem "jekyll-text-theme"
 gem "tzinfo-data"
 
