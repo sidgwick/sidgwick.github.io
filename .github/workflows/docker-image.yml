@@ -13,9 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag sjk:$(date +%s)
+        run: docker build . --file Dockerfile --tag sjk
 
-      - name: Checkout and build static site
+      - name: Build static site
         run: docker run -v `pwd`:/blog sjk
 
       - name: Deploy to GH Pages 🚀
