@@ -1,0 +1,9 @@
+header:
+  - titles:
+      en: Archive
+      zh-CN: 归档
+    url: /archive.html
+  - titles:
+      en: About
+      zh-CN: 关于
+    url: /about.html

@@ -2,3 +2,7 @@ _site
 .sass-cache
 *.swp
 data
+.bundle/
+.jekyll-cache/
+vendor/
+backup
