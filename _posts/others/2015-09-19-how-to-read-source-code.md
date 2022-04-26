@@ -4,6 +4,8 @@ date: 2015-09-19 10:28:04
 tags: others
 ---
 
+原文: [https://wiki.c2.com/?TipsForReadingCode](https://wiki.c2.com/?TipsForReadingCode)
+
 ## Tips For Reading Code
 
 提高编程技巧的一个重要方法就是阅读伟大的程序([ReadGreatPrograms]). 诸如
