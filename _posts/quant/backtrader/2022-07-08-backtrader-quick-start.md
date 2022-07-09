@@ -4,6 +4,8 @@ date: 2022-07-08 21:34:04
 tags: backtrader quant
 ---
 
+> 参考原文: [https://www.backtrader.com/docu/quickstart/quickstart](https://www.backtrader.com/docu/quickstart/quickstart)
+>
 > IMPORTANT: The data files used in the quickstart guide are updated from time to time, which means that the adjusted close changes and with it the close (and the other components). That means that the actual output may be different to what was put in the documentation at the time of writing.
 
 ## 平台使用
@@ -19,6 +21,8 @@ tags: backtrader quant
    当访问 line 上面的数据时, 当前值得索引是 `0`, 访问上一个值使用索引 `-1`. Python 语言中 `-1` 一般用来表示一个可迭代对象的最后一个值, 我们这里用 `-1` 来表示最后一个 **output** 值(这里的 `output` 应该就是已经处理过的数据列表)
 
 现在想像一下我们在策略初始化的时候创建一条移动平均线(Simple Moving Average):
+
+<!--more-->
 
 ```python
 self.sma = SimpleMovingAverage(.....)
@@ -213,17 +217,6 @@ DataSeries(Data Feed 中的基础类)对象具有别名用于访问众所周知�
      # Datas are in a subfolder of the samples. Need to find where the script is
      # because it could have been called from anywhere
      modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-@@ -21,8 +42,9 @@
-         dataname=datapath,
-         # Do not pass values before this date
-         fromdate=datetime.datetime(2000, 1, 1),
--        # Do not pass values after this date
-+        # Do not pass values before this date
-         todate=datetime.datetime(2000, 12, 31),
-+        # Do not pass values after this date
-         reverse=False)
-
-     # Add the Data Feed to Cerebro
 ```
 
 执行之后我们可以得到以下输出:
@@ -1312,9 +1305,9 @@ if __name__ == '__main__':
 
 > 这个最优参数只是针对回测数据, 不能代表未来.
 
-### 结语
+## 结语
 
-上面*渐进式*的示例显示了如何从一个只有骨架的脚本到一个能正常工作并且可以绘制图表及执行参数优化的交易系统是如何演变的.
+上面 _渐进式_ 的示例显示了如何从一个只有骨架的脚本到一个能正常工作并且可以绘制图表及执行参数优化的交易系统是如何演变的.
 
 后续可以做更多事情来提高胜率:
 
