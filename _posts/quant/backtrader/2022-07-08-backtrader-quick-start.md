@@ -1,6 +1,6 @@
 ---
 title: "Backtrader 学习系列 - QuickStart"
-date: 2022-07-09 21:34:04
+date: 2022-07-08 21:34:04
 tags: backtrader quant
 ---
 
