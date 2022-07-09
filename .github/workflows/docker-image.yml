@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag sjk
+      # - uses: actions/checkout@v3
+      # - name: Build the Docker image
+      #   run: docker build . --file Dockerfile --tag sjk
 
       - name: Build static site
-        run: docker run -v `pwd`:/blog sjk
+        run: docker run -v `pwd`:/blog sidgwick/jkelly:latest
 
       - name: Deploy to GitHub Pages
         uses: crazy-max/ghaction-github-pages@v2
