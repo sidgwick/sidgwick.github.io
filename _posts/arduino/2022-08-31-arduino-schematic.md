@@ -1,6 +1,6 @@
 ---
 title: "如何阅读 Arduino 原理图"
-date: 2022-09-01 01:34:04
+date: 2022-08-31 01:34:04
 tags: arduino schematic
 ---
 
@@ -109,6 +109,7 @@ Quite refreshing to see the board again right? By now, you should be able to app
 
 # 参考资料
 
+- [Arduino Uno Rev3 官方原理图](https://www.arduino.cc/en/uploads/Main/Arduino_Uno_Rev3-schematic.pdf)
 - [Understanding Arduino UNO Hardware Design](https://www.allaboutcircuits.com/technical-articles/understanding-arduino-uno-hardware-design/)
 - [ISP/ICSP - Installing an Arduino Bootloader](https://learn.sparkfun.com/tutorials/installing-an-arduino-bootloader)
 - [ISP/ICSP - Using an In-System Programmer](https://www.instructables.com/Using-an-In-System-Programmer/)
