@@ -1,6 +1,6 @@
 ---
 title: "Python 虚拟环境管理 virtualenvwrapper 相关使用"
-date: 2022-12-26 10:28:04
+date: 2022-10-12 10:28:04
 tags: python, virtualenv, virtualenvwrapper
 ---
 
