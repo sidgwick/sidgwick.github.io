@@ -11,6 +11,8 @@ To install virtualenv and virtualenvwrapper for repetitive use you need a correc
 
 Although you can get python installer from Python website I strongly advice against it. The most convenient and future-proof method to install Python on MacOS is brew.
 
+<!--more-->
+
 Main difference between installer from Python website and brew is that installer puts python packages to:
 
 /Library/Frameworks/Python.framework/Versions/3.x
