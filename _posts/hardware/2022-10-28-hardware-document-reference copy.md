@@ -14,3 +14,8 @@ tags: reference
 
 - [Atmel Atmega328P](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7810-Automotive-Microcontrollers-ATmega328P_Datasheet.pdf)
 - [Atmel Atmega16L](https://ww1.microchip.com/downloads/en/DeviceDoc/doc2466.pdf)
+
+## Camera
+
+- [微雪电子 OV7670 Camera Board(立创商城)](https://datasheet.lcsc.com/lcsc/1912111437_Waveshare-OV7670-Camera-Board--B_C359963.pdf)
+- [OV7670/OV7171 高级数据手册(AMOBBS 论坛)](https://d1.amobbs.com/bbs_upload782111/files_19/ourdev_489771.pdf)
