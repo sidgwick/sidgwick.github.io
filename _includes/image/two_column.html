@@ -1,0 +1,32 @@
+<div style="display: flex; justify-content: space-around">
+  <figure
+    class="image"
+    style="
+      display: flex;
+      justify-content: flex-end;
+      flex-direction: column;
+      align-items: center;
+      width: 40%;
+    "
+  >
+    <img src="{{ include.url1 }}" alt="{{ include.description1 }}" />
+    <figcaption style="text-align: center">
+      {{ include.description1 }}
+    </figcaption>
+  </figure>
+  <figure
+    class="image"
+    style="
+      display: flex;
+      justify-content: flex-end;
+      flex-direction: column;
+      align-items: center;
+      width: 40%;
+    "
+  >
+    <img src="{{ include.url2 }}" alt="{{ include.description2 }}" />
+    <figcaption style="text-align: center">
+      {{ include.description2 }}
+    </figcaption>
+  </figure>
+</div>
