@@ -20,6 +20,7 @@ tags: reference
 ### Espressif
 
 - [ESP-IDF 编程指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/)
+- [ESP32-Wroom-32 技术规格书(Chinese)](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_cn.pdf)
 - [ESP32 Technical Reference Manual(Chinese)](https://www.espressif.com.cn/sites/default/files/documentation/esp32_technical_reference_manual_cn.pdf)
 - [ESP32 Doit 板原理图](https://liefyuan.blog.csdn.net/article/details/81060143)
 - [Espressif Product Comparison](https://products.espressif.com/#/product-comparison)
