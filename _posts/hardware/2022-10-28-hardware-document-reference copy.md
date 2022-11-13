@@ -12,8 +12,17 @@ tags: reference
 
 ## MCU
 
+### Atmel
+
 - [Atmel Atmega328P](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7810-Automotive-Microcontrollers-ATmega328P_Datasheet.pdf)
 - [Atmel Atmega16L](https://ww1.microchip.com/downloads/en/DeviceDoc/doc2466.pdf)
+
+### Espressif
+
+- [ESP-IDF 编程指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/)
+- [ESP32 Technical Reference Manual(Chinese)](https://www.espressif.com.cn/sites/default/files/documentation/esp32_technical_reference_manual_cn.pdf)
+- [ESP32 Doit 板原理图](https://liefyuan.blog.csdn.net/article/details/81060143)
+- [Espressif Product Comparison](https://products.espressif.com/#/product-comparison)
 
 ## Camera
 
