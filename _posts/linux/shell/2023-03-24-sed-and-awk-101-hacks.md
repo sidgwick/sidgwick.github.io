@@ -6,7 +6,14 @@ tags: linux shell sed awk
 
 > 图书在线阅读地址: [sed and awk 101 hacks](https://vds-admin.ru/sed-and-awk-101-hacks)
 
+本文记录 _*[sed and awk 101 hacks](https://vds-admin.ru/sed-and-awk-101-hacks)*_ 一书中学到的知识点备忘.
+
+- TOC
+  {:toc}
+
 # sed 部分
+
+<!--more-->
 
 1. `e` 将 pattern space 里面的内容当成命令执行, 并将执行结果当做 pattern space 的内容
 2. 替换过程中的 `&` 字符
@@ -16,8 +23,6 @@ tags: linux shell sed awk
    - 反向引用不光可以用在要替换的字符串中, 也可以用在正则表达式本身.
    - `\(abc\)\1` 匹配 `abcabc`
    - 匹配两位一模一样的数字 `\([0-9]\)\1`
-
-<!--more-->
 
 5. 替换字符串中的 \l, \L, \u, \U, \E 标记
 6. 正则表达式
