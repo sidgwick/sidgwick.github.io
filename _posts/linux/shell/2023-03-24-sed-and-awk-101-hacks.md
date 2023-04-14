@@ -1,5 +1,5 @@
 ---
-title: "sed And awk 101 hacks 笔记"
+title: "sed and awk 101 hacks 笔记"
 date: 2023-03-24 02:28:04
 tags: linux shell sed awk
 ---
@@ -16,6 +16,8 @@ tags: linux shell sed awk
    - 反向引用不光可以用在要替换的字符串中, 也可以用在正则表达式本身.
    - `\(abc\)\1` 匹配 `abcabc`
    - 匹配两位一模一样的数字 `\([0-9]\)\1`
+
+<!--more-->
 
 5. 替换字符串中的 \l, \L, \u, \U, \E 标记
 6. 正则表达式
