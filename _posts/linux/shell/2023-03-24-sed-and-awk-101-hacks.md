@@ -10,6 +10,10 @@ tags: linux shell sed awk
 
 # sed 部分
 
+> 本文中的 **有些知识并不实用, 如果懵, 不用全都学会, 关键是有机会的时候多用一用, 熟能生巧, 慢慢的就都记住了**
+>
+> !!! 文中的操作不一定是最简洁的操作, 有些为了演示功能生造出来的使用场景.
+
 本文中使用到的示例文件是系统中的密码文件 `passwd`:
 
 ```text
@@ -27,6 +31,8 @@ mengqc:x:500:500:mengqc:/home/mengqc:/bin/bash
 sed 是一种没有交互的流式编辑器(stream editor), 一般在写脚本的时候用的比较多, 作为文本处理三剑客之一, 如果用的熟练, 在平常工作的时候做一些批量替换批量生成之类的处理也很方便.
 
 sed 工作的时候, 正常情况下每次读取一行文件内容放到一块叫做 `模式空间(pattern space)` 的内存区域, 然后 sed 根据给它的指令, 对空间中的文本做编辑/替换等处理操作. 处理过程中并不是它读取到的每一行数据都需要处理, 这时候可以通过指定 `地址` 约束要处理的文本范围.
+
+![](https://vds-admin.ru/sites/default/files/article_images/sedawk101hacks002.jpg)
 
 除了模式空间之外, 还有一块叫做 `保持空间(hold space)` 的区域, 可以用来暂存数据, sed 提供了专用的命令来操作这两个空间的数据, 通过合理的配合使用, 威力惊人.
 
@@ -99,6 +105,17 @@ MENGQC ==> mengqc:x:500:500:mengqc:/home/mengqc:/bin/bash
 this_is_class_name
 ```
 
+关于替换分隔符:
+
+sed 的替换分隔符不止可以使用 `/`, 事实上我们可以用任何字符当做分隔符, 比放在替换路径的场景中, 可以使用 `#` 当做分隔符:
+
+```console
+> echo '/etc/passwd' | sed 's#/etc#/opt/etc#'
+/opt/etc/passwd
+```
+
+**更多**
+
 正则表达式的更多知识:
 
 - 开始结束 `^`, `$`
@@ -113,19 +130,123 @@ this_is_class_name
 
 ### 编辑/修改/删除命令
 
-9. `a`, `i` 命令其实可以支持多行写入
-10. `c` 命令用于修改当前行, 和 `a`, `i` 类似, 他也可以支持多行写入
+像 vim 一样, sed 有用于往前插入(`insert`)内容的 `i` 命令和往后追加(`append`)内容的 `a` 命令和用于修改(`change`)的 `c`命令.
+
+```console
+> cat passwd | sed '1asecond line'
+root:x:0:0:root:/root:/bin/bash
+second line
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:23:daemon:/sbin:/sbin/nologin
+desktop:x:80:80:desktop:/var/lib/menu/kde:/sbin/nologin
+mengqc:x:500:500:mengqc:/home/mengqc:/bin/bash
+```
+
+```console
+> cat passwd | sed '1ifirst line'
+first line
+root:x:0:0:root:/root:/bin/bash
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:23:daemon:/sbin:/sbin/nologin
+desktop:x:80:80:desktop:/var/lib/menu/kde:/sbin/nologin
+mengqc:x:500:500:mengqc:/home/mengqc:/bin/bash
+```
+
+```console
+> cat passwd | sed '1cchange content'
+change content
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:23:daemon:/sbin:/sbin/nologin
+desktop:x:80:80:desktop:/var/lib/menu/kde:/sbin/nologin
+mengqc:x:500:500:mengqc:/home/mengqc:/bin/bash
+```
 
 ### 模式空间和保持空间操作
 
-17. `x` 命令交换模式空间/保持空间
-18. `g/G` 命令是 `get` 命令的缩写, 表示从保持空间拷贝/追加数据到模式空间
-19. `h/H` 命令是 `hold` 命令的缩写, 表示从模式空间拷贝/追加数据到保持空间
+保持空间一般用来暂存数据, 通过对模式空间和保持空间的合理安排, 可以实现很多复杂功能.
+
+`g/G` 命令是 `get` 命令的缩写, 表示从保持空间拷贝/追加数据到模式空间, `h/H` 命令是 `hold` 命令的缩写, 表示从模式空间拷贝/追加数据到保持空间.
+
+举一个例子, 把相邻两行合并成一行, 并交换顺序:
+
+```console
+> seq 1 11 | sed -n 'h;n;G;s/\n/ /p'
+2 1
+4 3
+6 5
+8 7
+10 9
+```
+
+> 思考:
+>
+> 1. 上面的例子 11 为什么没有打印出来, 想打印的话要怎么做?
+> 2. 上面的问题, 三行应该怎么做?
+
+`x` 命令交换模式空间/保持空间, 还是上面的例子, 假如说不想对调两行的位置了, 可以再用一个 `x` 命令处理一下:
+
+```console
+> seq 1 11 | sed -n 'h;n;x;G;s/\n/ /p'
+1 2
+3 4
+5 6
+7 8
+9 10
+```
 
 ### 流程跳转
 
-22. `b` 命令用于直接跳转到标号处
-23. `t` 命令也是跳转到标号处, 但是有判断之前执行的替换操作是成功的这个前提才会跳转
+`b` 命令用于直接跳转到标号处. 如果不指定标号, 直接跳到脚本结束位置, 开始下次处理循环.
+
+```console
+> cat play
+剧名：白夜追凶
+评分：9.0
+剧名：秘密深林
+评分：9.3
+剧名：权利的游戏第七季
+评分：9.3
+剧名：请回答 1988
+评分：9.6
+```
+
+```console
+✗ cat play | sed -n 'N;s/\n/, /;/1988/!b label;s/^/---/;:label;p'
+剧名：白夜追凶, 评分：9.0
+剧名：秘密深林, 评分：9.3
+剧名：权利的游戏第七季, 评分：9.3
+---剧名：请回答 1988, 评分：9.6
+```
+
+不指定标号的例子:
+
+```console
+> cat play | sed -n 'N;s/\n/, /;/1988/!b;s/^/---/;p'
+---剧名：请回答 1988, 评分：9.6
+```
+
+`t` 命令也是跳转到标号处, 但是有判断之前执行的替换操作是成功的这个前提才会跳转
+
+下面的例子利用跳转, 全局替换了文本中的 `o` 字符, 实现了替换命令里面的 `g` 标志功能.
+
+```console
+> cat passwd | sed ':x;s/o/O/;tx'
+rOOt:x:0:0:rOOt:/rOOt:/bin/bash
+bin:x:1:1:bin:/bin:/sbin/nOlOgin
+daemOn:x:2:23:daemOn:/sbin:/sbin/nOlOgin
+desktOp:x:80:80:desktOp:/var/lib/menu/kde:/sbin/nOlOgin
+mengqc:x:500:500:mengqc:/hOme/mengqc:/bin/bash
+```
+
+再来一个有点绕的:
+
+```console
+> cat play | sed -n 'N;s/\n/, /;:x;/1988/s/^/-/;/----/!tx;p'
+剧名：白夜追凶, 评分：9.0
+剧名：秘密深林, 评分：9.3
+剧名：权利的游戏第七季, 评分：9.3
+----剧名：请回答 1988, 评分：9.6
+```
 
 #### 其他命令
 
@@ -139,6 +260,20 @@ this_is_class_name
 8. `w` 命令用于将模式空间写到文件, `r` 命令用于将文件读到<标准输出还是模式空间?看上去不像是模式空间>
 9. `P` 多行模式空间的情况下, 仅输出第一行
 10. `D` 多行模式空间的情况下, 仅删除第一行, 且不会将下一行读取到模式空间(对比 `d`), 并重新从头开始对模式空间内容执行命令
+
+#### 其他
+
+11 行丢失的问题:
+
+```console
+> {seq 1 11; seq 1 5 | sed 's/^._$/AAAAAA/'} | sed -n 'h;n;G;s/\n/ /p' | sed 's/AAAAAA\s_//g' | sed '/^$/d'
+2 1
+4 3
+6 5
+8 7
+10 9
+11
+```
 
 # awk 部分
 
