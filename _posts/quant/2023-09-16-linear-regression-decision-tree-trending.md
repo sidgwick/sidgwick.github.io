@@ -8,20 +8,20 @@ tags: time-sequence quant decision-tree linear-regression
 
 本篇的主题是分段线性拟合, 也叫回归树, 是一种集成算法, 它同时使用了决策和线性回归的原理, 其中有两点不太容易理解, 一个是决策树中熵的概念, 一个是线性拟合时求参数的公式为什么是由矩阵乘法实现的. 如需详解, 请见前篇:
 
-- [《机器学习\_决策树与信息熵》](https://link.jianshu.com/?t=http://blog.csdn.net/xieyan0811/article/details/78556366)
-- [《机器学习\_最小二乘法，线性回归与逻辑回归》](https://link.jianshu.com/?t=http://blog.csdn.net/xieyan0811/article/details/78562610)
+- [《机器学习\_决策树与信息熵》](http://blog.csdn.net/xieyan0811/article/details/78556366)
+- [《机器学习\_最小二乘法，线性回归与逻辑回归》](http://blog.csdn.net/xieyan0811/article/details/78562610)
 
 # 画出股票的趋势线
 
 我们常在股票节目里看到这样的趋势线:
 
-![趋势线](https://upload-images.jianshu.io/upload_images/5357893-6ff3221bee4a3d29.png)
+![趋势线](https://qiniu.iuwei.fun/blog/algorithm/%E8%B6%8B%E5%8A%BF%E7%BA%BF.png)
 
 <!--more-->
 
 比如说平台突破就可以买入了, 几千支股票, 能不能用程序的方式筛选哪支突破了呢? 需要解决的主要问题是: 怎么判断一段时间内股票的涨/跌/横盘, 以及一段趋势的起止点和角度呢?
 
-![分段线性拟合](https://upload-images.jianshu.io/upload_images/5357893-73e481f40910d7dc.png)
+![分段线性拟合](https://qiniu.iuwei.fun/blog/algorithm/%E5%88%86%E6%AE%B5%E7%BA%BF%E6%80%A7%E6%8B%9F%E5%90%88.png)
 
 这里我们使用分段线性拟合, 图中蓝色的点是某支股票每日的收盘价, 红色的直线为程序画出的趋势线. 稍做修改, 还可以轻松地画出每段趋势所在的箱体, 阻力线和支撑线, 以及判断此前一般时间的趋势. 下面我们就来看看原理和具体算法.
 
@@ -29,15 +29,15 @@ tags: time-sequence quant decision-tree linear-regression
 
 ## 线性回归
 
-先看看线性回归(Linear regression), 线性回归是利用数理统计中回归分析, 来确定两种或两种以上变量间相互依赖的定量关系的一种统计分析方法. 简单地说, 二维中就是画一条直线, 让它离所有点都尽量地近(距离之和最小), 用线抽象地表达这些点. 具体请见[《机器学习\_最小二乘法，线性回归与逻辑回归》](https://link.jianshu.com/?t=http://blog.csdn.net/xieyan0811/article/details/78562610)
+先看看线性回归(Linear regression), 线性回归是利用数理统计中回归分析, 来确定两种或两种以上变量间相互依赖的定量关系的一种统计分析方法. 简单地说, 二维中就是画一条直线, 让它离所有点都尽量地近(距离之和最小), 用线抽象地表达这些点. 具体请见[《机器学习\_最小二乘法，线性回归与逻辑回归》](http://blog.csdn.net/xieyan0811/article/details/78562610)
 
-![线性回归](https://upload-images.jianshu.io/upload_images/5357893-744f47eddf7c9b13.png)
+![线性回归](https://qiniu.iuwei.fun/blog/algorithm/%E7%BA%BF%E6%80%A7%E5%9B%9E%E5%BD%92.png)
 
 ## 决策树
 
-我们再看看决策树, 决策树(Decision Tree)决策树是一个预测模型: 它是通过一系列的判断达到决策的方法. 具体请见[《机器学习\_决策树与信息熵》](https://link.jianshu.com/?t=http://blog.csdn.net/xieyan0811/article/details/78556366).
+我们再看看决策树, 决策树(Decision Tree)决策树是一个预测模型: 它是通过一系列的判断达到决策的方法. 具体请见[《机器学习\_决策树与信息熵》](http://blog.csdn.net/xieyan0811/article/details/78556366).
 
-![决策树](https://upload-images.jianshu.io/upload_images/5357893-6a298cf90e36051f.png)
+![决策树](https://qiniu.iuwei.fun/blog/algorithm/%E5%86%B3%E7%AD%96%E6%A0%91.png)
 
 ## 树回归
 
