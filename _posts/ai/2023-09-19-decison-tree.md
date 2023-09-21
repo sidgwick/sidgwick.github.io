@@ -46,57 +46,185 @@ $$
 
 指的是在经过特征 $X$ 的分类之后, 使得结果熵相对于分类操作之前的熵的减小值.
 
+# 决策树构造实例
+
+现在有一个表, 其中数据列举了人的幸福与否和年龄,工作,家庭,贷款情况的关系, 我们基于这张表构建一个决策树.
+
+首先我们可以计算得到, 根节点的信息熵为:
+
+**WIP**: 计算原始节点的信息增益
+
+然后对 4 个特征逐一分析, 分别尝试用他们作为决策依据, 看一下决策后那个特征对应的信息增益最大, 就可以认定这个特征是最好的分类特征. 要注意的是, 用特征切分原始数据集之后, 切分结果对应的信息熵是一个加权平均熵.
+
+**WIP**: 计算各个特征的信息增益
+
+可以看到使用 `F3-HOME` 特征, 信息增益是最大的, 因此可以选择它作为根节点.
+
+接下来对于各个特征子树的节点, 构建下一层的决策树时候就是在子数据集合基础上, 再找最优特征作为分类依据. 更深一层的节点也是一样的原理.
+
+```python
+from typing import Union
+
+import math
+import json
+
+
+# 创建数据
+def createDataSet():
+    # 数据
+    dataSet = [
+        [0, 0, 0, 0, "no"],
+        [0, 0, 0, 1, "no"],
+        [0, 1, 0, 1, "yes"],
+        [0, 1, 1, 0, "yes"],
+        [0, 0, 0, 0, "no"],
+        [1, 0, 0, 0, "no"],
+        [1, 0, 0, 1, "no"],
+        [1, 1, 1, 1, "yes"],
+        [1, 0, 1, 2, "yes"],
+        [1, 0, 1, 2, "yes"],
+        [2, 0, 1, 2, "yes"],
+        [2, 0, 1, 1, "yes"],
+        [2, 1, 0, 1, "yes"],
+        [2, 1, 0, 2, "yes"],
+        [2, 0, 0, 0, "no"],
+    ]
+
+    # 列名
+    features = ["F1-AGE", "F2-WORK", "F3-HOME", "F4-LOAN"]
+    return dataSet, features
+
+
+def maxDataSetLabel(dsLabelList):
+    """找到 dsLabelList 中元素的众数并返回"""
+    counter = {}
+
+    for i in dsLabelList:
+        cnt = counter.get(i, 0)
+        cnt += 1
+        counter[i] = cnt
+
+    key = max(counter, key=counter.get)
+    return key
+
+
+def dataSetEntropy(dataSet) -> float:
+    """计算 dataSet 的熵值"""
+    counter = {}
+    for row in dataSet:
+        label = row[-1]
+        cnt = counter.get(label, 0) + 1
+        counter[label] = cnt
+
+    result = 0
+    total = len(dataSet)
+
+    for val in counter.values():
+        prob = val / total
+        result -= prob * math.log(prob, 2)
+
+    return result
+
+
+def weightSubDataSetEntropy(subDataSet, dataSetLen) -> float:
+    """计算按照特征拆分好的子数据集的加权熵"""
+    entropy = 0
+    dataSetLen = float(dataSetLen)
+    for _dataSet in subDataSet.values():
+        _entropy = dataSetEntropy(_dataSet)
+        entropy += _entropy * len(_dataSet) / dataSetLen
+
+    return entropy
+
+
+def chooseBestFeatureToSplit(dataSet):
+    """计算信息增益最大的特征
+
+    1. 计算分裂之前的熵值
+    2. 找到可以用于分裂的特征列表
+    3. 尝试使用 2 里面的每个特征分裂构造子树, 然后判断那个信息增益最大
+    4. 使用信息增益最大的那个特征, 构造分类节点数据
+    """
+    dsLen = len(dataSet)
+    numberFeatures = len(dataSet[0]) - 1  # number of features
+    curEntropy = dataSetEntropy(dataSet)  # initial entropy
+
+    bestGain = -1
+    bestFeatIndex = -1
+    for feat in range(numberFeatures):
+        subDataSet = subDataSetByFeature(dataSet, feat)
+        entropy = weightSubDataSetEntropy(subDataSet, dsLen)
+
+        gain = curEntropy - entropy
+        if gain > bestGain:
+            bestGain = gain
+            bestFeatIndex = feat
+
+    return bestFeatIndex
+
+
+def subDataSetByFeature(dataSet, bestFeatIndex):
+    """按照 bestFeatIndex 指示的特征, 将 dataSet 分类"""
+    result = {}
+
+    for row in dataSet:
+        val = row[bestFeatIndex]
+
+        valList = result.get(val, [])
+        valList.append(row[:bestFeatIndex] + row[bestFeatIndex + 1 :])
+        result[val] = valList
+
+    return result
+
+
+def createTreeNode(dataSet, labelList) -> Union[str, dict]:
+    """
+    创建决策树
+    :param dataSet: 数据集
+    :param features: 特征列表
+    :return: 决策树
+    """
+    # 当前数据集合中, 标签数据
+    dsLabelList = [i[-1] for i in dataSet]
+
+    # 已经分好类别, 节点不需要再分裂了
+    if len(set(dsLabelList)) <= 1:
+        return dsLabelList[0]
+
+    # label 虽然还没有完全分开, 但是已经没有特征可供拆分了, 统计众数, 作为标签返回
+    if len(labelList) <= 1:
+        return maxDataSetLabel(dsLabelList)
+
+    # 找到最优的特征用于分裂
+    bestFeatIndex = chooseBestFeatureToSplit(dataSet)
+    bestFeat = labelList[bestFeatIndex]
+
+    # 删除被选择的特征
+    del labelList[bestFeatIndex]
+
+    # 按照特征, 将数据分成不同的子集
+    subDataSet = subDataSetByFeature(dataSet, bestFeatIndex)
+
+    # 遍历每个特征值, 然后递归的构造子树
+    node = {}
+    for featVal, _dataSet in subDataSet.items():
+        _labelList = labelList.copy()
+        node[featVal] = createTreeNode(_dataSet, _labelList)
+
+    # 创建树
+    tree = {bestFeat: node}
+    return tree
+
+
+dataSet, features = createDataSet()
+
+tree = createTreeNode(dataSet, features)
+print(json.dumps(tree))
 ```
-四、决策树构造实例
-1、实例
 
+# 信息增益率与 gini 系数
 
-数据
-14天打球情况
-
-特征
-4种环境变化
-
-目标
-构造决策树，判断当出现一种天气的情况下，打不打球。
-
-2、决策树构造
-
-
-划分方式：4种
-
-问题：谁当根节点呢?
-
-依据：信息增益
-
-例子：基于天气划分
-
-
-在历史数据中(14天)有9天打球，5天不打球，所以此时的熵应为:
-
-
-4个特征逐一分析，先从outlook特征开始:
-Outlook = sunny时，熵值为0.971
-
-Outlook = overcast时，熵值为0
-
-Outlook = rainy时，熵值为0.971
-
-加权计算
-根据数据统计，outlook取值分别为sunny,overcast,rainy的概率分别为：5/14, 4/14, 5/14
-
-熵值计算：5/14 * 0.971 + 4/14 * 0 + 5/14 * 0.971 = 0.693
-
-(gain(temperature)=0.029 gain(humidity)=0.152 gain(windy)=0.048)
-
-计算信息增益
-信息增益：系统的熵值从原始的0.940下降到了0.693，增益为0.247。
-
-同样的方式可以计算出其他特征的信息增益，那么我们选择最大的那个，相当于是遍历了一遍特征，找出来了大当家，然后再其余中继续通过信息增益找二当家!
-
-（找：信息增益大，熵值小）
-
-五、信息增益率与gini系数
+```
 决策树算法
 ID3
 信息增益(有什么问题呢?)
@@ -152,3 +280,7 @@ GINI系数
 
 分类问题将熵值作为衡量标准。
 ```
+
+# 参考资料
+
+- [非常好 - 深刻理解决策树-动手计算 ID3 算法](https://zhuanlan.zhihu.com/p/435152553)
