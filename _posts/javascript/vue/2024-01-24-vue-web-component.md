@@ -4,8 +4,6 @@ date: 2024-01-24 19:00:00
 tags: javascript vue
 ---
 
-{% raw %}
-
 # 准备
 
 安装 vue 命令行工具:
@@ -23,6 +21,8 @@ tags: javascript vue
 可以使用的选项如下(参考, 根据自己的需要调整):
 
 <!--more-->
+
+{% raw %}
 
 ```text
 Vue CLI v5.0.8

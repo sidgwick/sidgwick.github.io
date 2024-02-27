@@ -8,3 +8,4 @@ vendor/
 backup
 jekyll-graphviz/
 _drafts/fmt.*
+.jekyll-metadata

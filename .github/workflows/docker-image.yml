@@ -20,7 +20,7 @@ jobs:
       #   uses: lhotari/action-upterm@v1
 
       - name: Build static site
-        run: docker run -v `pwd`:/blog sidgwick/jkelly:latest
+        run: docker run -v `pwd`:/blog sidgwick/jekyll:latest
 
       - name: Deploy to GitHub Pages
         uses: crazy-max/ghaction-github-pages@v2
