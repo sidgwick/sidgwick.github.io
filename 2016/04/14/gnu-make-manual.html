@@ -1,0 +1,2089 @@
+<!DOCTYPE html><html lang="zh-CN">
+  <head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"><title>GNU Make 中文手册 - 读书笔记 - 挚爱荒原</title>
+
+<meta name="description" content="第二章相关概念名词make 中的概念: 目标, 依赖, 命令行.依赖和命令行称为目标的规则, make 程序根据规则依赖关系, 决定是否执行规则所定义的命令行的过程称之为规则执行.">
+<link rel="canonical" href="http://sidgwick.github.io/2016/04/14/gnu-make-manual.html"><link rel="alternate" type="application/rss+xml" title="挚爱荒原" href="/feed.xml"><link rel="stylesheet" href="/assets/css/main.css"><link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css" ><!-- start custom head snippets -->
+
+<!-- end custom head snippets -->
+<script>(function() {
+  window.isArray = function(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  };
+  window.isString = function(val) {
+    return typeof val === 'string';
+  };
+
+  window.hasEvent = function(event) {
+    return 'on'.concat(event) in window.document;
+  };
+
+  window.isOverallScroller = function(node) {
+    return node === document.documentElement || node === document.body || node === window;
+  };
+
+  window.isFormElement = function(node) {
+    var tagName = node.tagName;
+    return tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA';
+  };
+
+  window.pageLoad = (function () {
+    var loaded = false, cbs = [];
+    window.addEventListener('load', function () {
+      var i;
+      loaded = true;
+      if (cbs.length > 0) {
+        for (i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+      }
+    });
+    return {
+      then: function(cb) {
+        cb && (loaded ? cb() : (cbs.push(cb)));
+      }
+    };
+  })();
+})();
+(function() {
+  window.throttle = function(func, wait) {
+    var args, result, thisArg, timeoutId, lastCalled = 0;
+
+    function trailingCall() {
+      lastCalled = new Date;
+      timeoutId = null;
+      result = func.apply(thisArg, args);
+    }
+    return function() {
+      var now = new Date,
+        remaining = wait - (now - lastCalled);
+
+      args = arguments;
+      thisArg = this;
+
+      if (remaining <= 0) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        lastCalled = now;
+        result = func.apply(thisArg, args);
+      } else if (!timeoutId) {
+        timeoutId = setTimeout(trailingCall, remaining);
+      }
+      return result;
+    };
+  };
+})();
+(function() {
+  var Set = (function() {
+    var add = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (data[i] === item) {
+          return;
+        }
+      }
+      this.size ++;
+      data.push(item);
+      return data;
+    };
+
+    var Set = function(data) {
+      this.size = 0;
+      this._data = [];
+      var i;
+      if (data.length > 0) {
+        for (i = 0; i < data.length; i++) {
+          add.call(this, data[i]);
+        }
+      }
+    };
+    Set.prototype.add = add;
+    Set.prototype.get = function(index) { return this._data[index]; };
+    Set.prototype.has = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (this.get(i) === item) {
+          return true;
+        }
+      }
+      return false;
+    };
+    Set.prototype.is = function(map) {
+      if (map._data.length !== this._data.length) { return false; }
+      var i, j, flag, tData = this._data, mData = map._data;
+      for (i = 0; i < tData.length; i++) {
+        for (flag = false, j = 0; j < mData.length; j++) {
+          if (tData[i] === mData[j]) {
+            flag = true;
+            break;
+          }
+        }
+        if (!flag) { return false; }
+      }
+      return true;
+    };
+    Set.prototype.values = function() {
+      return this._data;
+    };
+    return Set;
+  })();
+
+  window.Lazyload = (function(doc) {
+    var queue = {js: [], css: []}, sources = {js: {}, css: {}}, context = this;
+    var createNode = function(name, attrs) {
+      var node = doc.createElement(name), attr;
+      for (attr in attrs) {
+        if (attrs.hasOwnProperty(attr)) {
+          node.setAttribute(attr, attrs[attr]);
+        }
+      }
+      return node;
+    };
+    var end = function(type, url) {
+      var s, q, qi, cbs, i, j, cur, val, flag;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        s[url] = true;
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (cur.urls.has(url)) {
+            qi = cur, val = qi.urls.values();
+            qi && (cbs = qi.callbacks);
+            for (flag = true, j = 0; j < val.length; j++) {
+              cur = val[j];
+              if (!s[cur]) {
+                flag = false;
+              }
+            }
+            if (flag && cbs && cbs.length > 0) {
+              for (j = 0; j < cbs.length; j++) {
+                cbs[j].call(context);
+              }
+              qi.load = true;
+            }
+          }
+        }
+      }
+    };
+    var load = function(type, urls, callback) {
+      var s, q, qi, node, i, cur,
+        _urls = typeof urls === 'string' ? new Set([urls]) : new Set(urls), val, url;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (_urls.is(cur.urls)) {
+            qi = cur;
+            break;
+          }
+        }
+        val = _urls.values();
+        if (qi) {
+          callback && (qi.load || qi.callbacks.push(callback));
+          callback && (qi.load && callback());
+        } else {
+          q.push({
+            urls: _urls,
+            callbacks: callback ? [callback] : [],
+            load: false
+          });
+          for (i = 0; i < val.length; i++) {
+            node = null, url = val[i];
+            if (s[url] === undefined) {
+              (type === 'js' ) && (node = createNode('script', { src: url }));
+              (type === 'css') && (node = createNode('link', { rel: 'stylesheet', href: url }));
+              if (node) {
+                node.onload = (function(type, url) {
+                  return function() {
+                    end(type, url);
+                  };
+                })(type, url);
+                (doc.head || doc.body).appendChild(node);
+                s[url] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+    return {
+      js: function(url, callback) {
+        load('js', url, callback);
+      },
+      css: function(url, callback) {
+        load('css', url, callback);
+      }
+    };
+  })(this.document);
+})();
+</script><script>
+  (function() {
+    var TEXT_VARIABLES = {
+      version: '2.2.6',
+      sources: {
+        font_awesome: 'https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css',
+        jquery: 'https://cdn.bootcss.com/jquery/3.1.1/jquery.min.js',
+        leancloud_js_sdk: '//cdn.jsdelivr.net/npm/leancloud-storage@3.13.2/dist/av-min.js',
+        chart: 'https://cdn.bootcss.com/Chart.js/2.7.2/Chart.bundle.min.js',
+        gitalk: {
+          js: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.js',
+          css: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.css'
+        },
+        valine: 'https://unpkg.com/valine/dist/Valine.min.js',
+        mathjax: 'https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML',
+        mermaid: 'https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js'
+      },
+      site: {
+        toc: {
+          selectors: 'h1,h2,h3'
+        }
+      },
+      paths: {
+        search_js: '/assets/search.js'
+      }
+    };
+    window.TEXT_VARIABLES = TEXT_VARIABLES;
+  })();
+</script>
+</head>
+  <body>
+    <div class="root" data-is-touch="false">
+      <div class="layout--page js-page-root"><div class="page__main js-page-main page__viewport has-aside cell cell--auto">
+
+      <div class="page__main-inner"><div class="page__header d-print-none"><header class="header"><div class="main">
+      <div class="header__title">
+        <div class="header__brand"><svg version="1.0" width="2848.000000pt" height="2848.000000pt" viewBox="0 0 2848.000000 2848.000000" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <defs></defs>
+  <g transform="translate(0.000000,2848.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
+    <path d="M10593 18855 c-7 -8 -13 -19 -13 -25 0 -5 -4 -10 -10 -10 -5 0 -10
+-6 -10 -14 0 -8 -3 -16 -7 -18 -5 -1 -42 -55 -83 -118 -41 -63 -77 -117 -80
+-120 -13 -13 -181 -269 -201 -307 -7 -13 -16 -23 -21 -23 -4 0 -8 -7 -8 -15 0
+-8 -4 -15 -10 -15 -5 0 -10 -6 -10 -13 0 -8 -9 -22 -20 -32 -11 -10 -20 -24
+-20 -32 0 -7 -4 -13 -9 -13 -5 0 -13 -9 -16 -20 -3 -11 -12 -26 -18 -32 -12
+-13 -68 -95 -77 -113 -13 -26 -246 -370 -252 -373 -5 -2 -8 -10 -8 -18 0 -8
+-4 -14 -10 -14 -5 0 -10 -7 -10 -15 0 -8 -3 -15 -8 -15 -4 0 -12 -9 -17 -19
+-12 -23 -225 -347 -240 -364 -6 -7 -42 -60 -80 -119 -39 -59 -75 -108 -81
+-108 -6 0 -29 8 -50 17 -22 9 -48 18 -58 20 -11 2 -24 7 -30 12 -9 7 -171 74
+-186 77 -3 0 -14 5 -25 9 -49 21 -811 327 -820 329 -5 2 -19 7 -30 11 -123 52
+-267 109 -295 118 -19 6 -37 14 -40 17 -3 3 -9 6 -15 7 -5 1 -32 10 -58 20
+-45 17 -49 17 -58 1 -5 -9 -16 -24 -24 -32 -8 -8 -15 -18 -15 -23 0 -4 -14
+-23 -31 -40 -16 -18 -26 -33 -22 -33 4 0 3 -4 -2 -8 -10 -7 -69 -81 -110 -138
+-20 -28 -98 -131 -112 -149 -5 -5 -19 -26 -33 -45 -13 -19 -27 -37 -30 -40 -3
+-3 -43 -57 -90 -120 -47 -63 -92 -120 -100 -127 -8 -7 -10 -13 -5 -13 6 0 6
+-3 0 -8 -6 -4 -29 -32 -53 -62 -23 -30 -45 -59 -50 -65 -4 -5 -18 -26 -32 -45
+-13 -19 -27 -37 -30 -40 -3 -3 -25 -32 -50 -65 -24 -33 -48 -64 -52 -70 -5 -5
+-47 -62 -94 -125 -80 -109 -102 -138 -139 -185 -8 -11 -65 -87 -127 -170 -62
+-82 -116 -154 -120 -160 -5 -5 -38 -49 -73 -97 -35 -48 -70 -95 -79 -104 -9
+-8 -16 -19 -16 -24 0 -5 -7 -16 -15 -24 -9 -8 -43 -53 -77 -98 -34 -46 -65
+-84 -70 -86 -4 -2 -8 -8 -8 -13 0 -10 -5 -17 -45 -63 -14 -16 -25 -32 -25 -35
+0 -3 -11 -19 -25 -34 -14 -15 -23 -27 -20 -27 2 0 -4 -10 -14 -22 -17 -20
+-159 -207 -216 -284 -11 -15 -25 -32 -30 -38 -6 -6 -28 -37 -49 -68 -22 -32
+-43 -58 -47 -58 -4 0 -10 -8 -14 -19 -3 -10 -16 -30 -28 -43 -12 -13 -31 -37
+-41 -53 -10 -17 -25 -37 -33 -45 -8 -8 -35 -44 -61 -80 -25 -36 -49 -67 -52
+-70 -3 -3 -37 -48 -75 -100 -38 -52 -72 -97 -75 -100 -3 -3 -44 -57 -90 -120
+-91 -123 -107 -144 -128 -166 -7 -8 -11 -14 -8 -14 3 0 -3 -10 -13 -22 -20
+-23 -183 -238 -211 -278 -8 -12 -23 -31 -32 -43 -10 -12 -56 -74 -103 -137
+-87 -118 -113 -152 -130 -173 -6 -6 -35 -46 -65 -87 -59 -80 -78 -105 -98
+-125 -6 -8 -12 -16 -12 -19 0 -5 -87 -123 -100 -136 -3 -3 -97 -129 -210 -280
+-113 -151 -213 -284 -222 -294 -10 -11 -18 -24 -18 -29 0 -7 -51 -3 -90 8 -8
+2 -31 6 -50 9 -19 3 -46 8 -60 11 -24 5 -38 8 -120 22 -19 3 -44 8 -55 10 -11
+2 -33 6 -50 9 -16 3 -88 16 -160 30 -126 24 -175 33 -219 38 -11 2 -28 6 -36
+9 -8 3 -37 9 -65 13 -27 4 -57 9 -65 11 -21 4 -58 11 -105 19 -22 3 -42 8 -44
+10 -2 2 -13 -6 -23 -19 -11 -12 -32 -36 -46 -52 -15 -17 -56 -63 -92 -104 -36
+-41 -76 -87 -90 -101 -14 -15 -50 -56 -80 -91 -30 -35 -69 -79 -87 -99 -18
+-19 -43 -47 -55 -61 -13 -15 -50 -57 -84 -95 -77 -87 -141 -160 -224 -254 -36
+-41 -76 -85 -88 -99 -13 -13 -37 -42 -53 -64 -16 -22 -29 -37 -29 -33 0 4 -12
+-7 -27 -26 -16 -18 -32 -38 -38 -44 -5 -6 -35 -39 -65 -74 -30 -34 -68 -77
+-85 -95 -16 -18 -43 -49 -60 -69 -16 -20 -46 -53 -65 -74 -19 -21 -62 -69 -95
+-106 -33 -38 -73 -84 -90 -102 -16 -17 -49 -54 -72 -80 -22 -27 -55 -65 -73
+-84 -18 -19 -51 -57 -73 -83 -50 -58 -63 -73 -144 -163 -34 -38 -70 -78 -80
+-90 -51 -60 -142 -162 -170 -190 -18 -18 -33 -35 -33 -39 0 -3 -10 -16 -22
+-29 -20 -20 -101 -110 -155 -173 -10 -11 -47 -53 -83 -93 -36 -40 -69 -78 -75
+-85 -5 -6 -25 -28 -44 -48 l-34 -36 69 4 c38 3 114 7 169 10 55 2 132 7 170
+10 39 3 104 7 147 9 42 2 81 6 86 10 6 3 13 2 17 -4 4 -6 12 -7 18 -3 7 4 32
+8 57 9 25 1 88 5 140 8 52 4 133 9 180 11 47 3 114 7 150 10 36 3 106 7 155 9
+50 2 126 7 170 10 174 13 340 23 477 30 36 2 71 7 77 10 6 4 11 2 11 -4 0 -6
+5 -8 11 -4 12 7 59 11 201 18 47 2 91 7 97 10 6 4 11 2 11 -4 0 -6 5 -8 13 -3
+6 4 41 8 77 10 36 1 94 4 130 7 36 3 112 8 170 11 58 3 128 7 155 9 28 3 97 7
+155 11 58 3 139 8 180 11 41 2 113 6 160 9 47 2 85 5 85 5 0 2 186 13 242 14
+29 0 53 5 53 9 0 4 8 3 19 -2 10 -6 21 -7 25 -3 4 3 28 8 54 9 57 2 194 10
+317 18 50 3 119 7 155 9 36 2 108 7 160 11 52 3 127 8 165 10 39 3 115 7 170
+11 55 3 127 7 160 9 33 2 60 4 60 5 0 1 12 3 28 4 15 1 27 -3 27 -9 0 -7 3 -7
+8 0 4 6 19 11 35 12 92 3 82 -6 86 81 1 42 4 97 6 122 10 124 16 188 21 215 3
+17 7 44 9 60 4 30 14 94 21 130 2 10 6 37 9 60 3 22 8 48 11 57 6 20 13 52 20
+97 5 32 9 49 18 89 42 180 59 250 76 312 12 41 23 86 26 100 3 14 11 45 19 70
+41 135 59 197 62 211 1 9 8 29 14 45 7 16 12 32 11 35 -1 4 13 46 29 95 17 49
+32 99 33 111 2 13 9 29 16 38 7 8 10 15 7 15 -3 0 15 57 40 128 25 70 46 132
+47 137 2 6 6 19 10 30 5 11 12 34 18 50 5 17 14 39 18 50 18 46 35 91 36 98 1
+4 3 9 4 12 1 3 3 8 5 13 1 4 5 14 8 22 4 8 19 49 35 90 l28 75 649 2 c358 2
+731 3 830 3 l180 0 78 158 c42 87 77 163 77 170 0 7 5 12 12 12 6 0 9 3 5 6
+-3 4 4 25 15 48 12 22 23 43 23 46 1 6 30 68 98 210 27 58 50 110 52 115 1 6
+16 42 34 80 19 39 45 95 58 125 14 30 44 96 67 145 23 50 43 93 44 97 1 5 16
+38 33 75 43 93 72 157 74 163 3 8 45 99 101 219 30 62 54 120 54 127 0 8 5 14
+10 14 6 0 10 5 10 11 0 6 23 58 50 115 28 57 50 108 50 114 0 5 4 10 10 10 5
+0 9 3 8 8 -2 11 10 38 127 277 59 121 112 223 117 226 5 3 9 9 8 13 -4 13 22
+66 32 66 5 0 7 4 3 9 -3 5 3 17 12 27 10 10 17 19 16 21 -3 4 30 76 38 83 3 3
+19 32 36 65 59 116 78 150 91 163 6 7 12 20 12 28 0 8 5 14 10 14 6 0 10 5 10
+10 0 13 132 234 142 238 4 2 8 7 8 12 0 12 71 118 150 225 36 50 74 101 83
+115 9 13 17 21 17 16 0 -4 17 14 39 41 101 126 258 236 358 250 36 5 44 10 50
+32 3 14 10 32 16 39 5 6 7 12 4 12 -3 0 2 24 13 54 10 30 16 57 13 60 -4 3 0
+6 7 6 7 0 11 3 7 6 -3 4 0 19 9 35 8 16 11 29 7 29 -4 0 -2 5 5 12 7 7 12 21
+12 32 0 12 7 30 15 40 8 11 15 26 15 33 0 7 11 35 24 62 13 27 27 62 30 77 4
+15 16 40 27 55 10 15 19 32 19 38 0 12 71 152 81 161 4 3 15 21 26 40 31 58
+75 125 84 128 5 2 9 10 9 18 0 8 7 17 15 20 8 4 15 10 15 14 0 24 148 171 220
+219 54 37 141 81 170 86 8 2 15 4 15 5 0 11 185 17 230 7 17 -4 46 -10 65 -13
+19 -3 38 -8 42 -11 5 -2 16 -6 27 -8 34 -6 307 -101 325 -113 6 -3 16 -7 21
+-8 6 -1 33 -12 60 -24 28 -12 68 -30 90 -40 103 -45 122 -53 149 -66 16 -8 35
+-14 43 -14 7 0 13 -4 13 -10 0 -5 4 -10 10 -10 20 0 542 -256 780 -382 47 -25
+128 -67 180 -94 52 -27 97 -51 100 -54 3 -3 28 -17 55 -32 82 -42 208 -110
+240 -129 17 -10 46 -26 65 -36 19 -9 62 -33 95 -52 33 -19 61 -33 61 -30 1 2
+10 -3 20 -11 11 -8 28 -20 39 -26 11 -6 43 -24 70 -39 28 -16 70 -39 95 -53
+24 -13 57 -33 72 -44 15 -10 28 -16 28 -11 0 4 4 4 8 -2 4 -5 16 -15 27 -21
+29 -16 104 -58 150 -84 22 -13 60 -34 84 -48 25 -14 68 -38 95 -55 28 -16 71
+-41 96 -55 25 -13 52 -31 61 -38 8 -8 19 -14 23 -14 4 0 84 -45 177 -100 93
+-55 174 -100 179 -100 6 0 10 -4 10 -9 0 -5 8 -11 18 -15 9 -3 24 -10 32 -16
+14 -9 186 -111 255 -150 71 -41 110 -64 115 -70 3 -3 25 -16 50 -29 25 -13 52
+-29 60 -36 8 -7 22 -15 30 -19 8 -4 24 -12 35 -19 11 -7 88 -52 170 -102 83
+-49 152 -93 153 -97 2 -5 8 -8 13 -8 12 0 262 -152 271 -165 4 -5 8 -6 8 -2 0
+4 6 3 13 -3 6 -6 82 -53 167 -105 85 -52 164 -101 175 -110 10 -8 23 -15 28
+-15 4 0 35 -18 67 -40 32 -22 64 -40 69 -40 6 0 11 -4 11 -10 0 -5 5 -10 11
+-10 6 0 25 -11 43 -25 18 -14 38 -25 44 -25 6 0 16 -9 22 -20 6 -11 7 -20 2
+-20 -6 0 -12 -8 -15 -17 -4 -10 -26 -45 -50 -78 -24 -33 -79 -112 -122 -175
+-75 -111 -104 -152 -125 -177 -5 -7 -10 -17 -10 -23 0 -5 -3 -10 -8 -10 -4 0
+-12 -9 -17 -20 -13 -26 -176 -264 -186 -270 -4 -3 -15 -19 -25 -37 -11 -17
+-37 -57 -59 -90 -22 -32 -81 -116 -130 -188 -49 -71 -93 -131 -97 -133 -4 -2
+-8 -8 -8 -13 0 -5 -12 -27 -27 -48 -16 -21 -35 -49 -43 -61 -8 -12 -30 -43
+-48 -69 -32 -45 -300 -436 -384 -559 -24 -35 -54 -77 -66 -93 -13 -16 -20 -29
+-15 -29 4 0 3 -4 -4 -8 -11 -7 -61 -78 -149 -212 -20 -30 -41 -56 -45 -58 -5
+-2 -9 -9 -9 -16 0 -7 -9 -21 -20 -31 -11 -10 -20 -24 -20 -31 0 -7 -3 -14 -8
+-16 -4 -2 -25 -30 -47 -63 -21 -33 -41 -62 -44 -65 -3 -3 -30 -41 -60 -85 -73
+-107 -168 -246 -222 -323 -24 -35 -48 -71 -54 -80 -5 -9 -12 -19 -15 -22 -3
+-3 -14 -18 -26 -35 -60 -87 -151 -220 -164 -240 -24 -35 -81 -119 -182 -265
+-51 -75 -124 -182 -163 -239 -38 -57 -75 -109 -82 -116 -7 -7 -9 -15 -6 -19 4
+-3 2 -6 -4 -6 -5 0 -25 -24 -43 -52 -19 -29 -38 -54 -42 -56 -4 -2 -8 -8 -8
+-13 0 -9 -38 -68 -51 -79 -3 -3 -18 -23 -32 -45 -14 -22 -52 -78 -84 -125 -32
+-47 -87 -128 -123 -180 -35 -52 -67 -97 -70 -100 -9 -8 -84 -119 -95 -141 -5
+-10 -13 -19 -17 -19 -5 0 -8 -7 -8 -15 0 -8 -4 -15 -9 -15 -5 0 -12 -8 -15
+-18 -4 -10 -14 -27 -24 -38 -9 -11 -23 -29 -30 -40 -42 -64 -53 -81 -67 -100
+-43 -58 -143 -209 -140 -212 3 -3 276 129 285 138 3 3 10 6 17 7 7 2 58 25
+115 52 130 62 189 89 308 141 52 23 101 46 108 52 6 6 12 8 12 5 0 -3 50 16
+110 43 61 26 110 46 110 43 0 -2 12 5 26 16 14 11 32 17 40 14 8 -3 14 1 14 8
+0 7 3 10 6 7 3 -4 24 2 47 12 68 29 117 49 120 48 1 -1 13 5 27 12 14 8 30 15
+35 16 6 1 55 21 110 43 55 22 103 41 106 41 4 0 24 8 45 17 22 9 48 18 58 20
+11 2 24 7 30 12 9 7 82 34 96 36 5 0 60 21 95 35 23 10 225 81 240 84 6 2 17
+6 25 9 8 3 87 29 175 57 88 29 185 60 216 70 31 11 68 21 83 24 14 2 31 8 38
+13 7 4 18 8 23 9 12 2 127 34 247 68 47 13 89 22 92 18 3 -3 6 0 6 7 0 7 4 9
+10 6 5 -3 18 -2 27 4 10 5 32 11 48 14 17 3 37 8 45 11 8 3 26 8 40 10 14 3
+63 14 110 26 47 12 137 32 200 46 63 14 138 35 165 48 48 22 125 87 125 106 0
+5 6 15 13 22 11 10 47 101 52 128 1 3 5 23 9 45 16 80 17 104 20 318 2 120 -1
+220 -6 223 -4 3 -6 10 -3 15 4 5 8 82 10 172 2 89 6 173 9 187 19 105 30 144
+61 207 34 69 111 153 140 153 7 0 18 6 24 14 10 12 88 32 164 42 41 5 100 14
+124 18 11 3 36 7 54 10 19 3 44 8 55 10 12 2 37 7 56 10 19 3 72 14 119 25 47
+11 98 23 114 26 41 8 60 13 60 15 0 1 9 3 20 5 11 2 31 6 45 10 14 3 36 8 50
+11 14 2 36 7 50 11 14 3 30 7 35 9 6 1 46 11 91 23 45 11 92 23 105 25 13 3
+25 5 27 7 2 2 1 1 57 14 22 5 42 9 45 10 17 5 59 16 85 20 17 4 35 7 40 9 16
+4 89 19 105 21 8 1 26 5 40 9 14 3 41 8 60 10 19 3 35 5 35 6 0 1 36 4 80 6
+75 5 82 7 113 39 17 18 32 37 32 42 0 4 7 21 15 36 8 15 31 78 51 140 33 104
+43 137 49 177 1 8 5 22 8 30 13 36 66 269 72 315 1 11 5 27 8 35 6 16 62 291
+83 410 4 19 9 44 11 55 7 36 12 59 17 85 2 14 7 36 10 50 3 14 8 36 10 50 3
+14 7 35 10 46 2 12 7 39 10 60 4 22 8 46 11 54 2 8 6 26 9 40 15 88 17 100 51
+260 14 69 28 134 30 145 3 11 7 31 10 45 3 14 7 39 9 57 3 18 7 36 9 40 3 4 8
+25 11 46 7 45 25 125 33 147 3 8 7 29 9 45 3 17 11 53 18 80 8 28 20 77 26
+110 7 33 16 65 21 71 5 6 7 13 4 16 -3 2 9 54 26 114 17 60 32 116 34 124 20
+88 111 357 127 378 6 6 7 12 3 12 -4 0 0 11 9 25 9 14 14 25 11 25 -3 0 13 35
+36 78 23 42 48 88 55 102 20 38 88 110 120 127 42 22 94 23 135 2 42 -21 42
+-21 124 -114 113 -128 283 -311 393 -424 124 -129 362 -369 362 -367 0 1 58
+-55 129 -124 71 -69 177 -170 236 -225 114 -107 124 -116 231 -213 38 -35 87
+-80 109 -100 22 -20 76 -68 120 -107 44 -38 91 -81 105 -95 14 -14 39 -35 55
+-48 17 -13 46 -38 65 -55 19 -18 69 -61 110 -97 41 -36 80 -70 86 -76 6 -5 31
+-26 54 -45 23 -18 52 -43 64 -55 11 -11 46 -40 76 -65 30 -24 69 -57 86 -74
+18 -16 44 -39 58 -49 15 -11 37 -29 50 -40 21 -19 89 -76 140 -118 51 -41 171
+-143 176 -148 3 -4 14 -13 26 -21 28 -19 113 -89 141 -116 13 -12 23 -19 23
+-15 0 4 4 2 8 -3 4 -6 32 -30 62 -55 30 -25 58 -49 62 -55 4 -5 8 -6 8 -2 0 4
+18 -10 41 -33 22 -22 44 -40 47 -40 4 0 30 -20 57 -45 28 -24 53 -45 56 -45 3
+0 17 -10 31 -22 13 -13 37 -32 52 -43 15 -11 41 -31 56 -45 15 -14 40 -34 55
+-44 14 -11 34 -27 44 -35 10 -9 33 -27 51 -41 55 -42 95 -74 102 -85 4 -5 8
+-7 8 -3 0 4 11 -3 24 -15 26 -24 38 -33 161 -129 44 -35 82 -65 85 -68 3 -3
+43 -34 90 -70 99 -76 98 -75 172 -134 32 -25 62 -46 67 -46 5 0 11 -4 13 -8 3
+-7 61 -54 192 -155 16 -12 43 -34 61 -49 18 -16 37 -28 43 -28 6 0 12 -4 14
+-9 2 -4 41 -37 88 -71 47 -35 87 -66 90 -70 3 -3 50 -39 105 -80 114 -86 126
+-95 170 -132 18 -16 37 -28 43 -28 6 0 12 -4 14 -8 2 -4 68 -57 148 -117 80
+-61 147 -112 150 -115 3 -3 68 -52 145 -110 77 -57 142 -107 145 -110 3 -3 79
+-61 170 -129 91 -68 179 -135 195 -148 17 -13 35 -27 40 -31 11 -8 215 -162
+230 -174 6 -4 35 -27 65 -51 30 -23 80 -61 110 -84 30 -22 66 -50 79 -62 13
+-11 27 -21 30 -21 3 0 18 -10 31 -22 14 -13 82 -66 150 -118 69 -52 132 -100
+140 -107 44 -35 141 -111 170 -133 65 -49 165 -128 246 -195 13 -11 36 -29 50
+-40 14 -11 38 -30 52 -42 15 -12 86 -70 157 -128 72 -59 144 -119 161 -134 17
+-15 55 -47 84 -72 28 -24 62 -53 74 -64 12 -11 58 -51 101 -90 43 -38 106 -97
+140 -130 93 -91 103 -96 49 -24 -27 37 -55 75 -62 85 -29 44 -112 160 -122
+171 -5 7 -10 16 -10 22 0 5 -4 11 -8 13 -4 2 -28 32 -52 68 -64 93 -207 293
+-219 307 -6 7 -11 17 -11 22 0 6 -6 14 -14 18 -7 4 -18 18 -25 30 -11 22 -110
+163 -136 195 -7 9 -22 29 -32 45 -17 27 -95 138 -111 158 -4 6 -23 33 -42 60
+-19 28 -37 52 -42 53 -4 2 -8 8 -8 14 0 8 -44 73 -60 88 -3 3 -26 35 -50 72
+-25 38 -49 68 -53 68 -5 0 -5 5 -2 10 3 6 1 10 -4 10 -6 0 -11 5 -11 10 0 6
+-11 23 -24 38 -14 15 -25 31 -25 36 1 5 -3 12 -8 15 -8 5 -58 74 -155 213 -18
+26 -37 47 -41 48 -5 0 -5 5 -2 10 3 6 -1 13 -9 16 -9 3 -16 11 -16 18 0 6 -18
+34 -40 61 -22 28 -40 55 -40 62 0 6 -4 13 -9 15 -8 3 -145 190 -167 228 -12
+22 -42 64 -66 92 -10 12 -18 25 -18 30 0 4 -8 16 -17 27 -10 10 -34 42 -53 71
+-19 29 -43 60 -52 71 -9 10 -24 32 -33 48 -8 17 -20 31 -25 31 -6 0 -10 4 -10
+10 0 5 -21 40 -47 77 -67 96 -280 396 -290 408 -4 6 -33 46 -63 90 -30 44 -58
+81 -62 83 -4 2 -8 10 -8 17 0 7 -4 15 -8 17 -5 2 -36 44 -71 93 -63 91 -85
+123 -291 414 -63 89 -119 170 -125 179 -5 9 -12 19 -15 22 -3 3 -17 21 -30 40
+-13 19 -27 37 -30 40 -8 8 -70 100 -70 105 0 3 -12 19 -27 36 -16 17 -26 32
+-23 32 2 1 -3 11 -13 22 -14 18 -75 102 -137 190 -11 17 -38 53 -58 82 -20 28
+-43 59 -50 70 -7 10 -48 69 -92 131 -44 62 -80 117 -80 122 0 6 -4 10 -8 10
+-5 0 -27 28 -50 63 -24 34 -68 98 -99 142 -31 44 -68 96 -82 116 -14 20 -63
+89 -108 153 -46 63 -83 120 -83 126 0 25 -7 16 -223 -274 -12 -16 -34 -45 -50
+-65 -15 -20 -36 -47 -46 -61 -10 -14 -49 -66 -87 -117 -38 -50 -78 -104 -89
+-119 -11 -16 -28 -36 -37 -46 -10 -10 -18 -20 -18 -23 0 -4 -210 -287 -238
+-320 -4 -5 -19 -26 -32 -45 -14 -19 -27 -37 -30 -40 -3 -3 -39 -49 -79 -102
+-40 -54 -76 -98 -80 -98 -3 0 -19 23 -36 50 -16 27 -33 50 -37 50 -5 0 -8 5
+-8 10 0 10 -38 69 -51 80 -5 4 -38 53 -74 109 -5 8 -15 21 -22 28 -7 7 -22 31
+-34 53 -13 22 -26 40 -31 40 -4 0 -8 6 -8 14 0 8 -4 16 -8 18 -5 2 -50 64
+-100 138 -51 73 -101 144 -112 157 -11 13 -17 23 -14 23 6 0 -48 74 -58 78 -5
+2 -8 10 -8 17 0 8 -6 20 -13 27 -7 7 -44 58 -82 113 -38 55 -73 102 -77 103
+-4 2 -8 10 -8 18 0 8 -4 14 -10 14 -5 0 -10 7 -10 15 0 8 -4 15 -10 15 -5 0
+-10 5 -10 11 0 6 -6 16 -12 24 -15 15 -124 173 -151 217 -9 16 -25 38 -35 49
+-11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 6 0 6 3 0 8 -17
+11 -175 239 -175 251 0 6 -3 11 -8 11 -4 0 -22 21 -39 48 -30 44 -139 202
+-270 390 -32 46 -62 91 -68 100 -10 16 -20 29 -42 56 -7 8 -13 19 -13 23 0 4
+-12 21 -26 38 -14 16 -35 45 -47 65 -12 19 -27 41 -34 48 -7 7 -13 20 -13 28
+0 8 -4 14 -8 14 -4 0 -32 36 -61 80 -30 44 -58 80 -64 80 -6 0 -8 3 -4 6 6 6
+-81 136 -95 142 -5 2 -8 8 -8 12 0 11 -162 244 -172 248 -5 2 -8 8 -8 13 0 9
+-37 67 -51 79 -3 3 -34 48 -70 100 -35 52 -67 97 -71 98 -5 2 -8 8 -8 13 0 6
+-8 19 -18 30 -11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 7 0
+7 3 0 8 -15 11 -115 151 -115 161 0 5 -3 11 -7 13 -5 2 -33 39 -63 83 -30 44
+-58 85 -62 90 -26 32 -88 127 -88 135 0 6 -3 10 -7 10 -5 0 -30 34 -57 74
+l-49 74 -26 -16 c-26 -15 -72 -45 -259 -166 -56 -36 -107 -66 -112 -66 -4 0
+-10 -4 -12 -8 -1 -4 -32 -26 -68 -47 -36 -21 -66 -43 -68 -47 -2 -4 -9 -8 -16
+-8 -6 0 -21 -7 -31 -15 -35 -27 -158 -105 -166 -105 -4 0 -14 -6 -21 -12 -22
+-21 -127 -88 -138 -88 -5 0 -10 -4 -10 -9 0 -5 -13 -14 -30 -21 -16 -7 -30
+-16 -30 -21 0 -5 -6 -9 -14 -9 -8 0 -21 -6 -28 -13 -7 -7 -38 -28 -68 -47 -30
+-19 -58 -39 -62 -45 -4 -5 -8 -6 -8 -2 0 4 -15 -3 -33 -17 -19 -15 -39 -26
+-45 -26 -7 0 -12 -4 -12 -8 0 -5 -18 -17 -40 -28 -22 -10 -40 -22 -40 -26 0
+-5 -7 -8 -15 -8 -8 0 -15 -4 -15 -9 0 -5 -16 -17 -36 -27 -20 -11 -44 -23 -55
+-29 -10 -5 -19 -13 -19 -17 0 -5 -7 -8 -15 -8 -8 0 -15 -4 -15 -10 0 -5 -4
+-10 -10 -10 -5 0 -39 -19 -74 -42 -89 -59 -417 -268 -481 -308 -14 -8 -113
+-71 -220 -140 -107 -69 -205 -130 -218 -137 -12 -7 -29 -17 -37 -23 -8 -6 -51
+-33 -95 -62 -44 -28 -92 -59 -107 -69 -15 -11 -32 -19 -38 -19 -5 0 -10 -5
+-10 -10 0 -6 -12 -15 -26 -20 -14 -6 -47 -25 -72 -43 -51 -34 -78 -52 -102
+-64 -8 -4 -19 -11 -25 -15 -5 -5 -39 -27 -75 -50 -36 -23 -94 -60 -130 -83
+-36 -23 -108 -68 -160 -100 -52 -32 -97 -62 -100 -65 -3 -4 -30 -22 -60 -39
+-30 -17 -64 -38 -76 -46 -18 -14 -24 -12 -65 17 -24 18 -45 36 -47 40 -2 5 -8
+8 -13 8 -5 0 -33 18 -62 40 -65 50 -55 43 -162 120 -49 35 -94 68 -100 72 -9
+8 -90 67 -140 102 -92 66 -151 111 -153 118 -2 4 -8 8 -13 8 -8 0 -111 72
+-129 90 -3 3 -12 10 -22 15 -22 14 -302 217 -308 225 -3 3 -18 14 -35 24 -16
+11 -34 23 -40 28 -61 49 -116 88 -124 88 -5 0 -11 4 -13 8 -1 4 -59 48 -128
+97 -69 49 -127 92 -130 95 -3 4 -26 21 -52 38 -25 18 -54 39 -62 48 -9 8 -16
+12 -16 7 0 -4 -4 -3 -8 3 -4 6 -50 42 -102 79 -52 38 -99 72 -105 77 -5 4 -46
+34 -90 65 -44 32 -81 61 -83 65 -2 4 -8 8 -14 8 -6 0 -24 11 -42 25 -45 36
+-43 35 -133 100 -46 32 -83 62 -83 67 0 4 -5 8 -11 8 -9 0 -82 49 -124 83 -5
+4 -41 30 -80 58 -38 27 -77 55 -85 62 -8 7 -56 41 -105 77 -50 35 -99 72 -109
+82 -11 10 -25 18 -32 18 -7 0 -14 4 -16 8 -3 7 -529 394 -566 417 -9 6 -19 13
+-22 16 -24 28 -44 25 -108 -19 -37 -24 -70 -49 -73 -54 -3 -5 -8 -9 -10 -7 -4
+3 -90 -51 -99 -62 -3 -3 -10 -8 -15 -10 -19 -8 -460 -304 -463 -311 -2 -5 -7
+-8 -12 -8 -9 0 -222 -140 -230 -152 -8 -10 -54 -1 -58 12 -2 5 -7 10 -12 10
+-5 0 -46 23 -92 51 -46 29 -96 59 -113 69 -16 10 -66 40 -110 67 -44 27 -87
+52 -95 56 -8 4 -28 16 -45 27 -16 11 -37 23 -45 27 -28 15 -115 67 -120 73 -3
+3 -16 11 -30 18 -36 17 -64 35 -72 47 -4 6 -8 6 -8 2 0 -4 -15 2 -32 15 -46
+32 -67 45 -115 69 -24 12 -43 25 -43 30 0 5 -5 9 -10 9 -6 0 -35 15 -65 34
+-29 19 -55 33 -57 30 -3 -2 -13 5 -23 16 -10 11 -21 20 -25 20 -4 0 -67 36
+-139 80 -73 44 -136 80 -142 80 -5 0 -9 4 -9 9 0 5 -8 11 -17 15 -10 3 -38 19
+-63 34 -116 73 -134 81 -147 67z"></path>
+  </g>
+</svg><a title="宋志刚(Sidgwick)的个人博客, 主要是一些技术记录和分享. 不写博客的技术人员不 是好的技术人员. 工作之余写点小博客, 记录学习中遇到的点点滴滴, 方便自己以后 查看, 也方便和我遇到一样问题的人.
+" href="/">挚爱荒原</a></div><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></div><nav class="navigation">
+        <ul><li class="navigation__item"><a href="/archive.html">归档</a></li><li class="navigation__item"><a href="/about.html">关于</a></li><li><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></li></ul>
+      </nav></div>
+  </header>
+</div><div class="page__content"><div class ="main"><div class="grid grid--reverse">
+
+              <div class="col-aside d-print-none js-col-aside"><aside class="page__aside js-page-aside"><div class="toc-aside js-toc-root"></div>
+</aside></div>
+
+              <div class="col-main cell cell--auto"><!-- start custom main top snippet -->
+
+<!-- end custom main top snippet -->
+<article itemscope itemtype="http://schema.org/Article"><div class="article__header"><header><h1>GNU Make 中文手册 - 读书笔记</h1></header><span class="split-space">&nbsp;</span>
+          <a class="edit-on-github"
+            title="在 Github 上修改"
+            href="https://github.com/sidgwick/sidgwick.github.io/tree/master/_posts/c/2016-04-14-gnu-make-manual.md">
+            <i class="far fa-edit"></i></a></div><meta itemprop="headline" content="GNU Make 中文手册 - 读书笔记"><div class="article__info clearfix"><ul class="left-col menu"><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=c">c</a>
+            </li></ul><ul class="right-col menu"><li><i class="far fa-calendar-alt"></i> <span>2016年 04月14日</span>
+            </li></ul></div><meta itemprop="author" content="Zhigang Song"/><meta itemprop="datePublished" content="2016-04-14T22:28:04+08:00">
+    <meta itemprop="keywords" content="c"><div class="js-article-content"><div class="layout--article"><!-- start custom article top snippet -->
+
+<!-- end custom article top snippet -->
+<div class="article__content" itemprop="articleBody"><h2 id="第二章">第二章</h2>
+
+<h3 id="相关概念名词">相关概念名词</h3>
+
+<p><code class="language-plaintext highlighter-rouge">make</code> 中的概念: <code class="language-plaintext highlighter-rouge">目标</code>, <code class="language-plaintext highlighter-rouge">依赖</code>, <code class="language-plaintext highlighter-rouge">命令行</code>.</p>
+
+<p>依赖和命令行称为目标的规则, make 程序根据规则依赖关系, 决定是否执行规则所定义的命令行的过程称之为规则执行.</p>
+
+<!--more-->
+
+<p>命令行<strong>必须</strong>以 <code class="language-plaintext highlighter-rouge">Tab</code> 字符开始, 不过并不是所有的以 <code class="language-plaintext highlighter-rouge">Tab</code> 开始的行都是命令行.</p>
+
+<p>Make 程序把出现在第一条规则之后的所有以 <code class="language-plaintext highlighter-rouge">Tab</code> 开始的行, 都当做命令行. –&gt; 这句话有点怪</p>
+
+<p>概念: 伪目标(Phony Targets), 指的是没有依赖只有执行动作的目标</p>
+
+<p>默认情况下, make 执行的是<strong>第一个</strong>遇到的目标规则. 这个目标也称为 <code class="language-plaintext highlighter-rouge">终极目标</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">make</code> 不对提供给他的 Makefile 里面的规则依赖和命令行合法性最检查(因为它也不知道怎么检查), 它只是简单的执行提供给他的规则信息. 在遇到错误时, <code class="language-plaintext highlighter-rouge">make</code> 会立即退出并报告错误.</p>
+
+<h3 id="25-指定变量">2.5 指定变量</h3>
+
+<p>使用 <code class="language-plaintext highlighter-rouge">name = </code> 的语法来定义变量, 使用的时候使用 <code class="language-plaintext highlighter-rouge">$(name)</code> 来指代变量值. 比如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">objects</span> <span class="o">=</span> main.o <span class="se">\</span>
+	display.o
+
+<span class="nl">edit</span><span class="o">:</span> <span class="nf">$(objects)</span>
+	cc <span class="nt">-o</span> edit <span class="p">$(</span>objects<span class="p">)</span>
+
+<span class="nl">main.o</span><span class="o">:</span> <span class="nf">main.c main.h</span>
+	cc <span class="nt">-c</span> main.c <span class="nt">-o</span> main.o
+
+<span class="nl">display.o</span><span class="o">:</span> <span class="nf">display.c display.h app.h</span>
+	cc <span class="nt">-c</span> display.c <span class="nt">-o</span> display.o
+
+<span class="nl">clean</span><span class="o">:</span>
+	<span class="nb">rm</span> <span class="p">$(</span>objects<span class="p">)</span>
+</code></pre></div></div>
+
+<h3 id="26-自动推导规则">2.6 自动推导规则</h3>
+
+<p><code class="language-plaintext highlighter-rouge">make</code> 自带一个默认的规则(即 <code class="language-plaintext highlighter-rouge">隐含规则</code>), 能够自动使用 <code class="language-plaintext highlighter-rouge">cc -c</code> 完成对 <code class="language-plaintext highlighter-rouge">.c</code> 到 <code class="language-plaintext highlighter-rouge">.o</code> 文件编译. 在 Makefile 中我们只需要提供 <code class="language-plaintext highlighter-rouge">.o</code> 目标文件名字, <code class="language-plaintext highlighter-rouge">make</code> 就会自动的寻找合适的依赖文件, 并编译它.</p>
+
+<p>利用隐含规则, 上面 makefile 现在可以更新为:</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/Makefile
+</span><span class="gi">+++ b/Makefile
+</span><span class="p">@@ -4,12 +4,9 @@</span> objects = main.o \
+ edit: $(objects)
+ 	cc -o edit $(objects)
+<span class="err">
+</span><span class="gd">-main.o: main.c main.h
+-	cc -c main.c -o main.o
+-
+-display.o: display.c display.h app.h
+-	cc -c display.c -o display.o
+</span><span class="gi">+main.o:
++display.o: app.h
+</span><span class="err">
+</span> clean:
+<span class="gd">-	rm $(objects)
+</span><span class="gi">+	rm edit $(objects)
+</span></code></pre></div></div>
+
+<h3 id="关于伪目标的说明">关于伪目标的说明</h3>
+
+<ol>
+  <li>可以通过 <code class="language-plaintext highlighter-rouge">.PHONY</code> 特殊目标将 <code class="language-plaintext highlighter-rouge">clean</code> 目标声明为伪目标. 如此可以避免当磁盘上存在一个名为 <code class="language-plaintext highlighter-rouge">clean</code> 文件时, 目标 <code class="language-plaintext highlighter-rouge">clean</code> 所在规则的命令无法执行</li>
+  <li>在命令行之前使用 <code class="language-plaintext highlighter-rouge">-</code> 可以忽略命令 <code class="language-plaintext highlighter-rouge">rm</code> 的执行错误.</li>
+</ol>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/Makefile
+</span><span class="gi">+++ b/Makefile
+</span><span class="p">@@ -1,6 +1,8 @@</span>
+ objects = main.o \
+ 	display.o
+<span class="err">
+</span><span class="gi">+.PHONY: clean
++
+</span> edit: $(objects)
+ 	cc -o edit $(objects)
+<span class="err">
+</span><span class="p">@@ -8,5 +10,4 @@</span> main.o:
+ display.o: app.h
+<span class="err">
+</span> clean:
+<span class="gd">-	rm edit $(objects)
+</span><span class="gi">+	-rm edit $(objects)
+</span></code></pre></div></div>
+
+<h2 id="第三章">第三章</h2>
+
+<h3 id="相关概念名词-1">相关概念名词</h3>
+
+<p><code class="language-plaintext highlighter-rouge">显式规则</code>, <code class="language-plaintext highlighter-rouge">隐含规则</code>, <code class="language-plaintext highlighter-rouge">变量定义</code>, <code class="language-plaintext highlighter-rouge">指示符</code>, <code class="language-plaintext highlighter-rouge">注释</code></p>
+
+<ul>
+  <li>显式规则: 描述了在何种情况下如何更新一个或者多个被称为目标的文件</li>
+  <li>隐含规则: make 根据一类目标文件(典型的是根据文件名的后缀)而自动推导出来的规则</li>
+  <li>变量定义: 使用一个字符或字符串代表一段文本串, 当定义了一个变量以后, Makefile 后续在需要使用此文本串的地方, 通过引用这个变量来实现对文本串的使用</li>
+  <li>Makefile 指示符: 指示符指明在 make 程序读取 makefile 文件过程中所要执行的一个动作. 其中包括:
+– 读取一个文件, 读取给定文件名的文件, 将其内容作为 makefile 文件的一部分.
+– 决定(通常是根据一个变量的得值)处理或者忽略 Makefile 中的某一特定部分
+– 定义一个多行变量</li>
+  <li>注释: Makefile 中 <code class="language-plaintext highlighter-rouge">#</code> 字符后的内容被作为是注释内容(和 shell 脚本一样)处理. 如果此行的第一个非空字符为<code class="language-plaintext highlighter-rouge">#</code>, 那么此行为注释行. 注释行的结尾如果存在反斜线(<code class="language-plaintext highlighter-rouge">\</code>), 那么下一行也被作为注释行.</li>
+</ul>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/Makefile
+</span><span class="gi">+++ b/Makefile
+</span><span class="p">@@ -6,6 +6,9 @@</span> objects = main.o \
+ edit: $(objects)
+ 	cc -o edit $(objects)
+<span class="err">
+</span><span class="gi">+# This is a comment \
++comment too
++
+</span> main.o:
+ display.o: app.h
+</code></pre></div></div>
+
+<blockquote>
+  <p>奇技淫巧: 利用 make 的隐含规则, 构建 Makefile 里面不存在的目标: <code class="language-plaintext highlighter-rouge">make foo.o</code>, 将会执行 <code class="language-plaintext highlighter-rouge">cc -c -o foo.o foo.c</code></p>
+</blockquote>
+
+<h4 id="自动变量">自动变量</h4>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">$^</code> 代表所有通过目录搜索得到的依赖文件的完整路径名(目录 + 一般文件名)列表</li>
+  <li><code class="language-plaintext highlighter-rouge">$@</code> 代表规则的目标</li>
+  <li><code class="language-plaintext highlighter-rouge">$&lt;</code> 代表规则中通过目录搜索得到的依赖文件列表的第一个依赖文件</li>
+  <li><code class="language-plaintext highlighter-rouge">$*</code> 代表在静态模式规则中匹配到的目标模式的 <code class="language-plaintext highlighter-rouge">茎</code></li>
+  <li><code class="language-plaintext highlighter-rouge">$?</code> 表示依赖文件列表中被改变过的所有文件</li>
+  <li>变量 <code class="language-plaintext highlighter-rouge">CFLAGS</code> 是编译 <code class="language-plaintext highlighter-rouge">.c</code> 文件时 gcc 的编译选项, 可以在 Makefile 中给它指定明确的值, 也可以使用隐含的定义值</li>
+</ul>
+
+<h4 id="等于号和他的变种">等于号和他的变种</h4>
+
+<p>详细可以参考文章<a href="https://www.cnblogs.com/wanqieddy/archive/2011/09/21/2184257.html">https://www.cnblogs.com/wanqieddy/archive/2011/09/21/2184257.html</a>:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">=</code> 是最基本的赋值, make 在整个 makefile 展开之后, 再来决定变量值</li>
+  <li><code class="language-plaintext highlighter-rouge">:=</code> 是覆盖之前的值, make 在展开过程中, 就决定了变量值</li>
+  <li><code class="language-plaintext highlighter-rouge">?=</code> 是如果没有被赋值过就赋予等号后面的值</li>
+  <li><code class="language-plaintext highlighter-rouge">+=</code> 是添加等号后面的值</li>
+</ul>
+
+<h3 id="33-包含其它-makefile-文件">3.3 包含其它 makefile 文件</h3>
+
+<blockquote>
+  <p>概念: <code class="language-plaintext highlighter-rouge">include</code> 指示符</p>
+</blockquote>
+
+<p>在 Makefile 里面可以使用 <code class="language-plaintext highlighter-rouge">include</code> 包含其他的 Makefile 文件. <code class="language-plaintext highlighter-rouge">make</code> 在遇到 <code class="language-plaintext highlighter-rouge">include</code> 语句时, 会暂停当前 Makefile 的读取, 转而去读取被包含的那个(或者多个)文件.</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/Makefile
+</span><span class="gi">+++ b/Makefile
+</span><span class="p">@@ -6,6 +6,8 @@</span> objects = main.o \
+ edit: $(objects)
+ 	cc -o edit $(objects)
+<span class="err">
+</span><span class="gi">+include Makefile.include
++
+</span> # This is a comment \
+ comment too
+<span class="err">
+</span><span class="gd">--- /dev/null
+</span><span class="gi">+++ b/Makefile.include
+</span><span class="p">@@ -0,0 +1,2 @@</span>
+<span class="gi">+inc:
++	@echo Hello Include
+</span></code></pre></div></div>
+
+<p>执行 <code class="language-plaintext highlighter-rouge">make inc</code> 可以看到, <code class="language-plaintext highlighter-rouge">inc</code> 目标确实被包含了进来.</p>
+
+<h3 id="重要的变量环境变量内置变量">重要的变量(环境变量/内置变量)</h3>
+
+<p><code class="language-plaintext highlighter-rouge">MAKEFILES</code>: <code class="language-plaintext highlighter-rouge">make</code> 在正式读取 Makefile 文件之前, 先读取此变量指定的文件的内容, 多用于 <code class="language-plaintext highlighter-rouge">make</code> 递归调用过程中的通讯</p>
+
+<p><code class="language-plaintext highlighter-rouge">MAKEFILES_LIST</code>: <code class="language-plaintext highlighter-rouge">make</code> 程序在读取多个 makefile 文件时, 包括由环境变量 <code class="language-plaintext highlighter-rouge">MAKEFILES</code> 指定/命令行指定/当前工作下的默认的以及使用指示符 <code class="language-plaintext highlighter-rouge">include</code> 指定包含的, 在对这些文件进行解析执行之前 make 读取的文件名将会被自动依次追加到变量 <code class="language-plaintext highlighter-rouge">MAKEFILE_LIST</code> 的定义域中.</p>
+
+<p><code class="language-plaintext highlighter-rouge">.VARIABLES</code> 变量无法通过任何途径赋值, 它由 <code class="language-plaintext highlighter-rouge">make</code> 自动维护, 他被展开之后是此引用点之前 makefile 文件中所定义的所有全局变量列表. 包括 <code class="language-plaintext highlighter-rouge">空变量(未赋值的变量)</code> 和 <code class="language-plaintext highlighter-rouge">make 的内嵌变量</code>, 但不包含目标指定的变量, 目标指定变量值在特定目标的上下文有效.</p>
+
+<h3 id="43-依赖的类型">4.3 依赖的类型</h3>
+
+<p><code class="language-plaintext highlighter-rouge">常规依赖</code> 和 <code class="language-plaintext highlighter-rouge">order-only</code> 依赖.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">TARGETS</span><span class="o">:</span> <span class="nf">NORMAL-PREREQUISITES | ORDER-ONLY-PREREQUISITES</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">order-only</code> 依赖的特性是, 当 <code class="language-plaintext highlighter-rouge">order-only</code> 中的依赖文件发生变化的时候, <code class="language-plaintext highlighter-rouge">TARGETS</code> 不会重新构建.</p>
+
+<h3 id="44-文件名中使用通配符">4.4 文件名中使用通配符</h3>
+
+<p>Maekfile 中表示文件名时可使用通配符, 可使用的通配符有 <code class="language-plaintext highlighter-rouge">*</code>, <code class="language-plaintext highlighter-rouge">?</code>, <code class="language-plaintext highlighter-rouge">[...]</code>, 在 Makefile 中通配符的用法和含义和 Bash 中完全相同. 不过 Makefile 中这些统配符并不是可以用在任何地方, Makefile 中统配符可以出现在以下两种场合:</p>
+
+<ol>
+  <li>可以用在规则的目标, 依赖中. make 在读取 Makefile 时会自动对其进行匹配处理(通配符展开)</li>
+  <li>可出现在规则的命令中, 通配符的通配处理是在 shell 在执行此命令时完成的</li>
+</ol>
+
+<p>除这两种情况之外的其它上下文中不能直接使用通配符, 而是需要通过函数 <code class="language-plaintext highlighter-rouge">wildcard</code> 来实现</p>
+
+<blockquote>
+  <p>注意: 变量定义中使用的通配符不会被统配处理, 如果需要在变量里面使用通配符, 需要使用 <code class="language-plaintext highlighter-rouge">wildcard</code> 函数.</p>
+</blockquote>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/Makefile
+</span><span class="gi">+++ b/Makefile
+</span><span class="p">@@ -1,11 +1,10 @@</span>
+<span class="gd">-objects = main.o \
+-	display.o
+</span><span class="gi">+objects := $(patsubst %.c, %.o, $(wildcard *.c))
+</span><span class="err">
+</span> .PHONY: clean
+<span class="err">
+</span> edit: $(objects)
+ 	cc -o edit $(objects)
+<span class="gd">-	echo "${.VARIABLES}"
+</span><span class="gi">+	@echo *.c
+</span><span class="err">
+</span> include Makefile.include
+<span class="err">
+</span><span class="p">@@ -16,5 +15,7 @@</span> comment too
+ main.o:
+ display.o: app.h
+<span class="err">
+</span><span class="gi">+
++
+</span> clean:
+ 	-rm edit $(objects)
+</code></pre></div></div>
+
+<h3 id="45-目录搜寻">4.5 目录搜寻</h3>
+
+<h4 id="451-一般搜索变量-vpath">4.5.1 一般搜索(变量 <code class="language-plaintext highlighter-rouge">VPATH</code>)</h4>
+
+<p>通过变量 <code class="language-plaintext highlighter-rouge">VPATH</code> 可以指定依赖文件的搜索路径, 当规则的依赖文件在当前目录不存在时, make 会在此变量所指定的目录下去寻找这些依赖文件, 其实 <code class="language-plaintext highlighter-rouge">VPATH</code> 变量所指定的是 Makefile 中所有文件的搜索路径, 包括了规则的依赖文件和目标文件.</p>
+
+<p>定义变量 <code class="language-plaintext highlighter-rouge">VPATH</code> 时, 使用空格 ` ` 或者冒号 <code class="language-plaintext highlighter-rouge">:</code> 将多个需要搜索的目录分开. make 搜索目录的顺序是按照变量 <code class="language-plaintext highlighter-rouge">VPATH</code> 定义中的目录顺序进行的(当前目录永远是第一搜索目录).</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>VPATH = src:../headers
+</code></pre></div></div>
+
+<p>比如我们给 <code class="language-plaintext highlighter-rouge">display.[ch]</code> 创建一个叫做 display 的目录, 把文件移动进去, 使用 <code class="language-plaintext highlighter-rouge">VPATH</code> 指定这个搜索目录, make 依然能正常的编译得到可执行文件.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">objects</span> <span class="o">:=</span> main.o display.o kbd.o
+
+<span class="nv">VPATH</span> <span class="o">=</span> display
+
+<span class="nl">.PHONY</span><span class="o">:</span> <span class="nf">clean</span>
+
+<span class="nl">edit</span><span class="o">:</span> <span class="nf">$(objects)</span>
+	cc <span class="nt">-o</span> edit <span class="p">$(</span>objects<span class="p">)</span>
+	<span class="p">@</span><span class="nb">echo</span> <span class="k">*</span>.c
+
+<span class="nl">main.o</span><span class="o">:</span> <span class="nf">display.h kbd.h app.h</span>
+<span class="nl">display.o</span><span class="o">:</span> <span class="nf">app.h</span>
+<span class="nl">kbd.o</span><span class="o">:</span> <span class="nf">app.h</span>
+
+<span class="nl">clean</span><span class="o">:</span>
+	<span class="p">-</span><span class="nb">rm </span>edit <span class="p">$(</span>objects<span class="p">)</span>
+</code></pre></div></div>
+
+<h4 id="452-选择性搜索关键字-vpath">4.5.2 选择性搜索(关键字 <code class="language-plaintext highlighter-rouge">vpath</code>)</h4>
+
+<p>相比 <code class="language-plaintext highlighter-rouge">VPATH</code> 那么粗粒度的目录指定方式, <code class="language-plaintext highlighter-rouge">vpath</code> 可以为不同的文件类型指定不同的搜索目录, 使用方法如下:</p>
+
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">vpath PATTERN DIRECTORIES</code> 为所有符合模式 <code class="language-plaintext highlighter-rouge">PATTERN</code> 的文件指定搜索目录 <code class="language-plaintext highlighter-rouge">DIRECTORIES</code>, 多个目录使用空格或者冒号分开, 类似上一小节的 <code class="language-plaintext highlighter-rouge">VPATH</code> 变量</li>
+  <li><code class="language-plaintext highlighter-rouge">vpath PATTERN</code> 清除之前为符合模式 <code class="language-plaintext highlighter-rouge">PATTERN</code> 的文件设置的搜索路径</li>
+  <li><code class="language-plaintext highlighter-rouge">vpath</code> 清除所有已被设置的文件搜索路径</li>
+</ol>
+
+<p>比如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="err">vpath</span> <span class="err">%.h</span> <span class="err">../headers</span>
+</code></pre></div></div>
+
+<p>这个例子, 告诉 make <code class="language-plaintext highlighter-rouge">*.h</code> 文件需要去 <code class="language-plaintext highlighter-rouge">../headers</code> 文件夹里面寻找.</p>
+
+<h4 id="456-库文件和搜索目录">4.5.6 库文件和搜索目录</h4>
+
+<p>Makefile 中程序链接的静态库/共享库同样也可以通过搜索目录得到. 这一特性需要我们在规则的依赖时指定一个类似 <code class="language-plaintext highlighter-rouge">-lNAME</code> 的依赖文件名, 比如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">foo</span><span class="o">:</span> <span class="nf">foo.c -lcurses</span>
+	cc <span class="nv">$^</span> <span class="nt">-o</span> <span class="nv">$@</span>
+</code></pre></div></div>
+
+<p>遇到这种依赖文件的时候 make 将:</p>
+
+<ol>
+  <li>在执行规则时会在当前目录下搜索一个名字为 <code class="language-plaintext highlighter-rouge">libNAME.so</code> 的文件</li>
+  <li>如果当前工作目录下不存在这样一个文件, 则 make 会继续使用 <code class="language-plaintext highlighter-rouge">VPATH</code> 或者 <code class="language-plaintext highlighter-rouge">vpath</code> 指定的搜索目录搜索</li>
+  <li>还是不存在, make 将搜索系统库文件存在的默认目录, 顺序是: <code class="language-plaintext highlighter-rouge">/lib</code>, <code class="language-plaintext highlighter-rouge">/usr/lib</code>, <code class="language-plaintext highlighter-rouge">PREFIX/lib</code>(在 Linux 系统中为 <code class="language-plaintext highlighter-rouge">/usr/local/lib</code>, 其他的系统可能不同).</li>
+</ol>
+
+<p>如果 <code class="language-plaintext highlighter-rouge">libNAME.so</code> 通过以上的途径最后还是没有找到的话, 那么 make 将会按照以上的搜索顺序查找名字为 <code class="language-plaintext highlighter-rouge">libNAME.a</code> 的文件.</p>
+
+<p>在规则的依赖列表中如果出现 <code class="language-plaintext highlighter-rouge">-lNAME</code> 格式的依赖时, 表示需要搜索的依赖文件名为 <code class="language-plaintext highlighter-rouge">libNAME.so</code> 和 <code class="language-plaintext highlighter-rouge">libNAME.a</code>, 这是由变量 <code class="language-plaintext highlighter-rouge">.LIBPATTERNS</code> 指定的.</p>
+
+<p><code class="language-plaintext highlighter-rouge">.LIBPATTERNS</code> 的值一般是多个包含模式字符 <code class="language-plaintext highlighter-rouge">%</code> 的一个不包含空格的字符串(字), 多个字之间使用空格分开. 在规则中出现 <code class="language-plaintext highlighter-rouge">-lNAME</code> 格式的依赖时, 首先使用这里的 <code class="language-plaintext highlighter-rouge">NAME</code> 代替变量 <code class="language-plaintext highlighter-rouge">.LIBPATTERNS</code> 的第一个字的模式字符而得到第一个库文件名, 根据这个库文件名在搜索目录下查找, 如果能够找到就使用这个文件, 否则使用 <code class="language-plaintext highlighter-rouge">NAME</code> 代替第二个字的模式字符, 进行同样的查找.</p>
+
+<p>默认情况下 <code class="language-plaintext highlighter-rouge">.LIBPATTERNS</code> 的值为 <code class="language-plaintext highlighter-rouge">lib%.so lib%.a</code>. 这也是默认情况下在规则存在 <code class="language-plaintext highlighter-rouge">-lNAME</code> 格式的依赖时, 链接生成目标时使用 <code class="language-plaintext highlighter-rouge">libNAME.so</code> 和 <code class="language-plaintext highlighter-rouge">libNAME.a</code> 的原因.</p>
+
+<p>变量 <code class="language-plaintext highlighter-rouge">.LIBPATTERNS</code> 就是告诉链接器在执行链接过程中对于出现 <code class="language-plaintext highlighter-rouge">-LNAME</code> 的文件如何展开, 当然我们也可以将此变量置空, 取消链接器对 <code class="language-plaintext highlighter-rouge">-lNAME</code> 格式的展开.</p>
+
+<h3 id="46-伪目标">4.6 伪目标</h3>
+
+<p>将一个目标声明为伪目标的方法是将它作为特殊目标 <code class="language-plaintext highlighter-rouge">.PHONY</code> 的依赖.</p>
+
+<p>使用伪目标有两点原因:</p>
+
+<ol>
+  <li>避免在我们的 Makefile 中定义的只执行命令的目标(此目标的目的为了执行执行一些列命令, 而不需要创建这个目标)和工作目录下的实际文件出现名字冲突</li>
+  <li>提高执行 make 时的效率.</li>
+</ol>
+
+<p>在 make 的并行和递归执行过程中, 此情况下一般会存在一个变量, 定义为所有需要 make 的子目录, 对多个目录进行 make 的实现方式可以是<em>在一个规则的命令行中使用 shell 循环来完成</em>, 比如像下面这样:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">SUBDIRS</span> <span class="o">=</span> foo bar baz
+<span class="nl">subdirs</span><span class="o">:</span>
+	<span class="k">for </span><span class="nb">dir </span><span class="k">in</span> <span class="p">$(</span>SUBDIRS<span class="p">);</span> <span class="k">do</span> <span class="se">\</span>
+		<span class="p">$(</span>MAKE<span class="p">)</span> <span class="nt">-C</span> <span class="nv">$$</span><span class="nb">dir</span><span class="p">;</span> <span class="se">\</span>
+	<span class="k">done</span>
+</code></pre></div></div>
+
+<p>这种方式是利用 shell 的能力, 逐个处理 subdirs. 如果把这个工作交给 make 处理, 则可以充分利用 make 的并行特性:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">SUBDIRS</span> <span class="o">=</span> foo bar baz
+<span class="nl">.PHANY</span><span class="o">:</span> <span class="nf">subdirs $(SUBDIRS)</span>
+
+<span class="nl">subdirs</span><span class="o">:</span> <span class="nf">$(SUBDIRS)</span>
+<span class="nl">$(SUBDIRS)</span><span class="o">:</span>
+    <span class="err">$(MAKE)</span> <span class="err">-C</span> <span class="err">$@</span>
+<span class="nl">foo</span><span class="o">:</span> <span class="nf">bar</span>
+</code></pre></div></div>
+
+<p>说明: 通常在清除文件的伪目标所定义的命令中 <code class="language-plaintext highlighter-rouge">rm</code> 使用选项 <code class="language-plaintext highlighter-rouge">–f(–-force)</code> 来防止在缺少删除文件时出错并退出, 使 <code class="language-plaintext highlighter-rouge">make clean</code> 过程失败. 也可以在 <code class="language-plaintext highlighter-rouge">rm</code> 之前加上 <code class="language-plaintext highlighter-rouge">-</code> 来防止 <code class="language-plaintext highlighter-rouge">rm</code> 错误退出, 这种方式时 make 会提示错误信息但不会退出. 另外 make 存在一个内嵌隐含变量 <code class="language-plaintext highlighter-rouge">RM</code>, 它被定义为: <code class="language-plaintext highlighter-rouge">RM = rm –f</code>. 因此 在书写 <code class="language-plaintext highlighter-rouge">clean</code> 规则的命令行时可以使用变量 <code class="language-plaintext highlighter-rouge">$(RM)</code> 来代替 <code class="language-plaintext highlighter-rouge">rm</code>.</p>
+
+<h3 id="47-强制目标没有命令或依赖的规则">4.7 强制目标(没有命令或依赖的规则)</h3>
+
+<p>如果一个规则没有命令或者依赖, 并且它的目标不是一个存在的文件名, 那么在执行此规则时, 目标总会被认为是最新的. 就是说这个规则一旦被执行, make 就认为它的目标已经被更新过. 这 样的目标在作为一个规则的依赖时, 因为依赖总被认为被更新过, 因此作为依赖所在的规则中定义的命令总会被执行.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">clean</span><span class="o">:</span> <span class="nf">FORCE</span>
+    <span class="err">rm</span> <span class="err">$(objects)</span>
+
+<span class="nl">FORCE</span><span class="o">:</span>
+</code></pre></div></div>
+
+<h3 id="48-空目标文件">4.8 空目标文件</h3>
+
+<p>空目标文件是伪目标的一个变种, 此目标所在规则执行的目的和伪目标相同: 通过 make 命 令行指定将其作为终极目标来执行此规则所定义的命令.</p>
+
+<p>和伪目标不同的是, 这个目标可以是一个存在的文件, 但文件的具体内容我们并不关心, 通常此文件是一个空文件. 空目标文件只是用来记录上一次执行此规则命令的时间. 在这样的规则中, 命令部分都会使用 <code class="language-plaintext highlighter-rouge">touch</code> 在完成所有命令之后来更新目标文件的时间戳, 记录此规则命令的最后执行时间. make 时通过命令行将此目标作为终极目标, 当前目录下如果不存在这个文件, <code class="language-plaintext highlighter-rouge">touch</code> 会在第一次执行时创建一个空的文件(命名为空目标文件名).</p>
+
+<p>通常, 一个空目标文件应该存在一个或者多个依赖文件, 将这个目标作为终极目标, 在它所依赖的文件比它新时, 此目标所在规则的命令行将被执行.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">print</span><span class="o">:</span> <span class="nf">foo.c bar.c</span>
+    <span class="err">lpr</span> <span class="err">-p</span> <span class="err">$?</span>
+    <span class="err">touch</span> <span class="err">print</span>
+</code></pre></div></div>
+
+<h3 id="49-makefile-的特殊目标">4.9 Makefile 的特殊目标</h3>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">.PHONY</code>: 目标 <code class="language-plaintext highlighter-rouge">.PHONY</code> 的所有的依赖被作为伪目标</li>
+  <li><code class="language-plaintext highlighter-rouge">.DEFAULT</code>: 目标 <code class="language-plaintext highlighter-rouge">.DEFAULT</code> 所在规则定义的命令, 被用在重建那些没有具体规则的目标(明确规则和隐含规则). 就是说一个文件作为某个规则的依赖, 但却不是另外一个规则的目标 时, Make 程序无法找到重建此文件的规则, 此种情况时就执行 <code class="language-plaintext highlighter-rouge">.DEFAULT</code> 所指定的命令</li>
+  <li><code class="language-plaintext highlighter-rouge">.PRECIOUS</code>: 目标 <code class="language-plaintext highlighter-rouge">.PRECIOUS</code> 的所有依赖文件在 make 过程中会被特殊处理: 当命令在执行过程中被中断时, make 不会删除它们. 而且如果目标的依赖文件是中间过程文件, 同样这些文件不会被删除. 这一点目标 <code class="language-plaintext highlighter-rouge">.PRECIOUS</code> 和目标 <code class="language-plaintext highlighter-rouge">.SECONDAY</code> 实现的功能相同. 另外, 目标 <code class="language-plaintext highlighter-rouge">.PRECIOUS</code> 的依赖文件也可以是一个模式, 例如 <code class="language-plaintext highlighter-rouge">%.o</code>, 这样可以保留有规则创建的中间过程文件.</li>
+  <li><code class="language-plaintext highlighter-rouge">.INTERMEDIATE</code>: 目标 <code class="language-plaintext highlighter-rouge">.INTERMEDIATE</code> 的依赖文件在 make 时被作为中间过程文件对待. 没有任何依赖文件的目标 <code class="language-plaintext highlighter-rouge">.INTERMEDIATE</code> 没有意义</li>
+  <li><code class="language-plaintext highlighter-rouge">.SECONDARY</code>: 目标 <code class="language-plaintext highlighter-rouge">.SECONDARY</code> 的依赖文件被作为中间过程文件对待, 但这些文件不会被自动删除.</li>
+  <li><code class="language-plaintext highlighter-rouge">.DELETE_ON_ERROR</code>: 如果在 Makefile 中存在特殊目标 <code class="language-plaintext highlighter-rouge">.DELETE_ON_ERROR</code>, make 在执行过程中, 如果规则的命令执行错误, 将删除已经被修改的目标文件.</li>
+  <li><code class="language-plaintext highlighter-rouge">.IGNORE</code>: 如果给目标 <code class="language-plaintext highlighter-rouge">.IGNORE</code> 指定依赖文件, 则忽略创建这个文件所执行命令的错误. 给此目标指定命令是没有意义的. 当此目标没有依赖文件时, 将忽略所有命令执行的错误.</li>
+  <li><code class="language-plaintext highlighter-rouge">.LOW_RESOLUTION_TIME</code>: 目标 <code class="language-plaintext highlighter-rouge">.LOW_RESOLUTION_TIME</code> 的依赖文件被 make 认为是低分辨率时间戳文件. 给目标 <code class="language-plaintext highlighter-rouge">.LOW_RESOLUTION_TIME</code> 指定命令是没有意义的. 通常文件的时间辍都是高分辨率的, make 在处理依赖关系时, 对规则目标-依赖文件的高分辨率的时间戳进行比较, 判断目标是否过期. 但是在系统中并没有提供一个修改文件高分辨率时间辍的机制(方式), 因此类似 <code class="language-plaintext highlighter-rouge">cp -p</code> 这样的命令在根据源文件创建目的文件时, 所产生的目的文件的高分辨率时间辍的细粒度部分被丢弃(来源于源文件). 这样可能会造成目的文件的时间戳和源文件的相等甚至不及源文件新. 处理此类命令创建的文件时, 需要将命令创建的文件作为目标 <code class="language-plaintext highlighter-rouge">.LOW_RESOLUTION_TIME</code> 的依赖, 声明这个文件是一个低分辨率时间辍的文件</li>
+  <li><code class="language-plaintext highlighter-rouge">.SILENT</code>: 出现在目标 <code class="language-plaintext highlighter-rouge">.SILENT</code> 的依赖列表中的文件, make 在创建这些文件时, 不打印出重建此文件所执行的命令. 没有任何依赖文件的目标 <code class="language-plaintext highlighter-rouge">.SILENT</code> 告诉 make 在执行过程中不打印任何执行的命令</li>
+  <li><code class="language-plaintext highlighter-rouge">.EXPORT_ALL_VARIABLES</code>: 此目标应该作为一个简单的没有依赖的目标, 它的功能含义是将之后所有的变量传递给子 make 进程</li>
+  <li><code class="language-plaintext highlighter-rouge">.NOTPARALLEL</code>: Makefile 中, 如果出现目标 <code class="language-plaintext highlighter-rouge">.NOPARALLEL</code>, 则所有命令按照串行方式执行, 即使存在 make 的命令行参数 <code class="language-plaintext highlighter-rouge">-j</code>. 但在递归调用的子 make 进程中, 命令可以并行执行.</li>
+</ul>
+
+<p>所有定义的隐含规则后缀作为目标出现时, 都被视为一个特殊目标, 两个后缀串联起来也是如此, 例如 <code class="language-plaintext highlighter-rouge">.c.o</code>. 这样的目标被称为<strong>后缀规则的目标</strong>, 这种定义方式是已经过时的定义隐含规则的方法(目前, 这种方式还被用在很多地方). 原则上, 如果将其分为两个部分, 并将它们加到后缀列表中, 任何目标都可采用这种方式来表示. 实际中, 后缀通常以 <code class="language-plaintext highlighter-rouge">.</code> 开始, 因此, 以上的这些特别目标同样是以 <code class="language-plaintext highlighter-rouge">.</code> 开始</p>
+
+<h3 id="410-多目标">4.10 多目标</h3>
+
+<p>一个规则中可以有多个目标, 规则所定义的命令对所有的目标有效. 一个具有多目标的规则相当于多个规则, 规则的命令对不同的目标的执行效果不同, 因为在规则的命令中可能使用了自动环变量<code class="language-plaintext highlighter-rouge">$@</code>. 多目标规则意味着所有的目标具有相同的依赖文件. 多目标通常用在以下两种情况:</p>
+
+<ol>
+  <li>仅需要一个描述依赖关系的规则, 不需要在规则中定义命令. 例如 <code class="language-plaintext highlighter-rouge">kbd.o command.o files.o: command.h</code> 这个规则实现了同时给三个目标文件指定一个依赖文件.</li>
+  <li>对于多个具有类似重建命令的目标. 重建这些目标的命令并不需要是完全相同, 因为可以在命令行中使用自动环变量 <code class="language-plaintext highlighter-rouge">$@</code> 来引用具体的目标, 完成对它的重建.</li>
+</ol>
+
+<p>虽然在多目标的规则中, 可以根据不同的目标使用不同的命令(在命令行中使用自动化变量 <code class="language-plaintext highlighter-rouge">$@</code>). 但是, 多目标的规则并不能做到根据目标文件自动改变依赖文件(像上边例子中使用自动化变量 <code class="language-plaintext highlighter-rouge">$@</code> 改变规则的命令一样). 需要实现这个目的是, 要用到 make 的静态模式.</p>
+
+<h3 id="411-多规则目标">4.11 多规则目标</h3>
+
+<p>Makefile 中, 一个文件可以作为多个规则的目标(多个规则中只能有一个规则定义命令). 这种情况时, 以这个文件为目标的规则的所有依赖文件将会被合并成此目标一个依赖文件列表, 当其中任何一个依赖文件比目标更新(比较目标文件和依赖文件的时间戳)时, make 将会执行特定的命令来重建这个目标.</p>
+
+<p>对于一个多规则的目标, 重建此目标的命令只能出现在一个规则中(可以是多条命令). 如果多个规则同时给出重建此目标的命令, make 将使用最后一个规则中所定义的命令, 同时提示错误信息某些情况, 需要对相同的目标使用不同的规则中所定义的命令, 我们需要 <code class="language-plaintext highlighter-rouge">双冒号</code> 规则来实现.</p>
+
+<p>一个仅仅描述依赖关系的述规则可用来给出一个或做多个目标文件的依赖文件. 例如, Makefile 中通常存在一个变量, 就像以前我们提到的 <code class="language-plaintext highlighter-rouge">objects</code> , 它定义为所有的需要编译生成的 <code class="language-plaintext highlighter-rouge">.o</code> 文件的列表. 当这些 <code class="language-plaintext highlighter-rouge">.o</code> 文件在其源文件所包含的头文件 <code class="language-plaintext highlighter-rouge">config.h</code> 发生变化之后能够自动的被重建, 我们可以使用多目标的方式来书写 Makefile:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">objects</span> <span class="o">=</span> foo.o bar.o
+<span class="nl">foo.o </span><span class="o">:</span> <span class="nf">defs.h</span>
+<span class="nl">bar.o </span><span class="o">:</span> <span class="nf">defs.h test.h</span>
+<span class="nl">$(objects) </span><span class="o">:</span> <span class="nf">config.h</span>
+</code></pre></div></div>
+
+<p>这样做的好处是: 我们可以在源文件增加或者删除了包含的头文件以后不用修改已经存在的 Makefile 的规则, 只需要增加或者删除某一个.o 文件依赖的头文件. 这种方式很简单也很方便. 对于一个大的工程来说, 这样做的好处是显而易见的. 在一个大的工程中, 对于一个单独目录下的 <code class="language-plaintext highlighter-rouge">.o</code> 文件的依赖规则建议使用此方式. 规则中头文件的依赖描述规则也可以使用 gcc 自动产生.</p>
+
+<p>另外, 我们也可以通过一个变量来增加目标的依赖文件, 使用 make 的命令行来指定某一个目 标的依赖头文件, 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">extradeps</span><span class="o">=</span>
+<span class="nl">$(objects) </span><span class="o">:</span> <span class="nf">$(extradeps)</span>
+</code></pre></div></div>
+
+<p>它的意思是: 如果我们执行 <code class="language-plaintext highlighter-rouge">make extradeps=foo.h</code> 那么 <code class="language-plaintext highlighter-rouge">foo.h</code> 将作为所有的 <code class="language-plaintext highlighter-rouge">.o</code> 文件的依赖文件. 当然我们只执行 <code class="language-plaintext highlighter-rouge">make</code> 的话, 就没有指定任何文件作为 <code class="language-plaintext highlighter-rouge">.o</code> 文件的依赖文件.</p>
+
+<p>在多规则的目标中, 如果目标的任何一个规则没有定义重建此目标的命令, make 将会寻找一个合适的隐含规则来重建此目标. 关于隐含规则可参考第十章 make 的隐含规则.</p>
+
+<h3 id="412-静态模式">4.12 静态模式</h3>
+
+<p>静态模式规则是这样一个规则: 规则存在多个目标, 并且不同的目标可以根据目标文件的名字来自动构造出依赖文件. 静态模式规则比多目标规则更通用, 它不需要多个目标具有相同的依赖, 但是静态模式规则中的依赖文件必须是相类似的而不是完全相同的.</p>
+
+<h4 id="4121-静态模式规则的语法">4.12.1 静态模式规则的语法</h4>
+
+<p>首先, 我们来看一下静态模式规则的基本语法:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">TARGET ... </span><span class="o">:</span> <span class="nf">TAGET-PATTERN : PREREQ-PATTERNS ...</span>
+    <span class="err">COMMANDS</span>
+    <span class="err">...</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">TAGETS</code> 列出了此规则的一系列目标文件, 像普通规则的目标一样可以包含通配符. <code class="language-plaintext highlighter-rouge">TAGET-PATTERN</code> 和 <code class="language-plaintext highlighter-rouge">PREREQ-PATTERNS</code> 说明了如何为每一个目标文件生成依赖文件. 从目标模式(<code class="language-plaintext highlighter-rouge">TAGET-PATTERN</code>)的目标名字中抽取一部分字符串(称为 <code class="language-plaintext highlighter-rouge">茎</code> ). 使用 <code class="language-plaintext highlighter-rouge">茎</code> 替代依赖模式(<code class="language-plaintext highlighter-rouge">PREREQ-PATTERNS</code>)中的相应部分来产生对应目标的依赖文件. 下边详细介绍这一替代的过程.</p>
+
+<p>首先在目标模式和依赖模式中, 一般需要包含模式字符 <code class="language-plaintext highlighter-rouge">%</code>. 在目标模式中 <code class="language-plaintext highlighter-rouge">%</code> 可以匹配目标文件的任何部分, 模式字符 <code class="language-plaintext highlighter-rouge">%</code> 匹配的部分就是 <code class="language-plaintext highlighter-rouge">茎</code>. 目标文件和目标模式的其余部分必须精确的匹配. 比如: 目标 <code class="language-plaintext highlighter-rouge">foo.o</code> 符合模式 <code class="language-plaintext highlighter-rouge">%.o</code>, 其 <code class="language-plaintext highlighter-rouge">茎</code> 为 <code class="language-plaintext highlighter-rouge">foo</code>. 而目标 <code class="language-plaintext highlighter-rouge">foo.c</code> 和 <code class="language-plaintext highlighter-rouge">foo.out</code> 就不符合此目标模式.</p>
+
+<p>每一个目标的依赖文件是使用此目标的 <code class="language-plaintext highlighter-rouge">茎</code> 代替依赖模式(<code class="language-plaintext highlighter-rouge">PREREQ-PATTERNS</code>)中的模式字符 <code class="language-plaintext highlighter-rouge">%</code> 而得到. 例如: 上边的例子中依赖模式(<code class="language-plaintext highlighter-rouge">PREREQ-PATTERNS</code>)为 <code class="language-plaintext highlighter-rouge">%.c</code>, 那么使用 <code class="language-plaintext highlighter-rouge">茎</code> <code class="language-plaintext highlighter-rouge">foo</code> 替代依赖模式中的 <code class="language-plaintext highlighter-rouge">%</code> 得到的依赖文件就是 <code class="language-plaintext highlighter-rouge">foo.c</code>.</p>
+
+<p>需要明确的一点是: 在模式规则的依赖列表中使用不包含模式字符 <code class="language-plaintext highlighter-rouge">%</code> 也是合法的. 代表这个文件是所有目标的依赖文件.</p>
+
+<p>我们来看一个例子, 它根据相应的.c 文件来编译生成 <code class="language-plaintext highlighter-rouge">foo.o</code> 和 <code class="language-plaintext highlighter-rouge">bar.o</code> 文件:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">objects</span> <span class="o">=</span> foo.o bar.o
+
+<span class="nl">all</span><span class="o">:</span> <span class="nf">$(objects)</span>
+
+<span class="nl">$(objects)</span><span class="o">:</span> <span class="nf">%.o: %.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="nt">-c</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> <span class="nv">$&lt;</span> <span class="nt">-o</span> <span class="nv">$@</span>
+</code></pre></div></div>
+
+<p>例子中, 规则描述了所有的 <code class="language-plaintext highlighter-rouge">.o</code> 文件的依赖文件为对应的 <code class="language-plaintext highlighter-rouge">.c</code> 文件, 对于目标 <code class="language-plaintext highlighter-rouge">foo.o</code>, 取其茎 <code class="language-plaintext highlighter-rouge">foo</code> 替代对应的依赖模式 <code class="language-plaintext highlighter-rouge">%.c</code> 中的模式字符 <code class="language-plaintext highlighter-rouge">%</code> 之后可得到目标的依赖文件 <code class="language-plaintext highlighter-rouge">foo.c</code>. 这就是目标 <code class="language-plaintext highlighter-rouge">foo.o</code> 的依赖关系 <code class="language-plaintext highlighter-rouge">foo.o: foo.c</code>, 规则的命令行描述了如何完成由 <code class="language-plaintext highlighter-rouge">foo.c</code> 编译生成目标 <code class="language-plaintext highlighter-rouge">foo.o</code>. 命令行中 <code class="language-plaintext highlighter-rouge">$&lt;</code> 和 <code class="language-plaintext highlighter-rouge">$@</code> 是自动化变量, <code class="language-plaintext highlighter-rouge">$&lt;</code> 表示规则中的第一个依赖文件, <code class="language-plaintext highlighter-rouge">$@</code> 表示规则中的目标文件. 上边的这个规则描述了以下两个具体的规则:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">foo.o</span><span class="o">:</span> <span class="nf">foo.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="nt">-c</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> foo.c <span class="nt">-o</span> foo.o
+
+<span class="nl">bar.o</span><span class="o">:</span> <span class="nf">bar.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="nt">-c</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> bar.c <span class="nt">-o</span> bar.o
+</code></pre></div></div>
+
+<p>在使用静态模式规则时, 指定的目标必须和目标模式相匹配, 否则执行 make 时将会得到一个错误提示. 比如上面 <code class="language-plaintext highlighter-rouge">$(objects): %.o: %.c</code> 如果写成了 <code class="language-plaintext highlighter-rouge">$(objects): %.x: %.c</code>, 就会因为没有办法匹配合适的依赖文件导致报错.</p>
+
+<p>如果存在一个文件列表, 其中一部分符合某一种模式而另外一部分符合另外一种模式, 这种情况下我们可以使用 <code class="language-plaintext highlighter-rouge">filter</code> 函数来对这个文件列表进行分类, 在分类之后对确定的某一类使用模式规则. 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">files</span> <span class="o">=</span> foo.elc bar.o lose.o
+
+<span class="nl">$(filter %.o, $(files))</span><span class="o">:</span> <span class="nf">%.o: %.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="nt">-c</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> <span class="nv">$&lt;</span> <span class="nt">-o</span> <span class="nv">$@</span>
+
+<span class="nl">$(filter %.elc, $(files))</span><span class="o">:</span> <span class="nf">%.elc: %.el</span>
+	emacs <span class="nt">-f</span> batch-byte-compile <span class="nv">$&lt;</span>
+</code></pre></div></div>
+
+<p>其中 <code class="language-plaintext highlighter-rouge">$(filter %.o, $(files))</code> 的结果为 <code class="language-plaintext highlighter-rouge">bar.o lose.o</code>. <code class="language-plaintext highlighter-rouge">filter</code> 函数过滤不符合 <code class="language-plaintext highlighter-rouge">%.o</code> 模式的文件名而返回所有符合此模式的文件列表. 第一条静态模式规则描述了这些目标文件是通过编译对应的 <code class="language-plaintext highlighter-rouge">.c</code> 源文件来重建的. 同样第二条规则也是使用这种方式.</p>
+
+<p>我们通过另外一个例子来看一下自动环变量 <code class="language-plaintext highlighter-rouge">$*</code> 在静态模式规则中的使用方法:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">bigoutput littleoutput </span><span class="o">:</span> <span class="nf">%output : text.g</span>
+	generate text.g -<span class="nv">$*</span> <span class="o">&gt;</span> <span class="nv">$@</span>
+</code></pre></div></div>
+
+<p>当执行此规则的命令时, 自动环变量 <code class="language-plaintext highlighter-rouge">$*</code> 被展开为 <code class="language-plaintext highlighter-rouge">茎</code> . 在这里就是 <code class="language-plaintext highlighter-rouge">big</code> 和 <code class="language-plaintext highlighter-rouge">little</code>.</p>
+
+<p>静态模式规则对一个较大工程的管理非常有用, 它可以对整个工程的同一类文件的重建规则进行一次定义, 而实现对整个工程中此类文件指定相同的重建规则. 比如, 可以用来描述整个工程中所 有的 <code class="language-plaintext highlighter-rouge">.o</code> 文件的依赖规则和编译命令. 通常的做法是将生成同一类目标的模式定义在一个 <code class="language-plaintext highlighter-rouge">make.rules</code> 的文件中. 在工程各个模块的 Makefile 中包含此文件.</p>
+
+<h4 id="4122-静态模式和隐含规则">4.12.2 静态模式和隐含规则</h4>
+
+<p>Makefile 中, <strong>静态模式规则</strong>和被定义为<strong>隐含规则的模式规则</strong>是我们经常使用的两种方式. 两者相同的地方都是用目标模式和依赖模式来构建目标的规则中的文件依赖关系, 两者不同的地方是 make 在执行时使用它们的时机.</p>
+
+<p>隐含规则可被用在任何和它相匹配的目标上, 在 Makefile 中没有为这个目标指定具体的规则, 存在规则但规则没有命令行或者这个目标的依赖文件可被搜寻到. 当存在多个隐含规则和目标模式相匹配时, 只执行其中的一个规则. 具体执行哪一个规则取决于定义规则的顺序.</p>
+
+<p>相反的, 静态模式规则只能用在规则中明确指出的那些文件的重建过程中. 不能用在除此之外的任何文件的重建过程中, 并且它对指定的每一个目标来说是唯一的. 如果一个目标存在于两个规 则, 并且这两个规则都定以了命令, make 执行时就会提示错误.</p>
+
+<p>静态模式规则相比隐含模式规则有以下两个优点:</p>
+
+<ol>
+  <li>不能根据文件名通过词法分析进行分类的文件, 我们可以明确列出这些文件, 并使用静态模式规则来重建其隐含规则</li>
+  <li>对于无法确定工作目录内容, 并且不能确定是否此目录下的无关文件会使用错误的隐含规则而导致 make 失败的情况. 当存在多个适合此文件的隐含规则时, 使用哪一个隐含规则取决于其规则的定义顺序. 这种情况下我们使用静态模式规则就可以避免这些不确定因素, 因为静态模式中, 指定的目标文件有明确的规则来描述其依赖关系和重建命令</li>
+</ol>
+
+<h3 id="413-双冒号规则">4.13 双冒号规则</h3>
+
+<p>双冒号规则就是使用 <code class="language-plaintext highlighter-rouge">::</code> 代替普通规则的 <code class="language-plaintext highlighter-rouge">:</code> 得到的规则. 当同一个文件作为多个规则的目标时, 双冒号规则的处理和普通规则的处理过程完全不同(双冒号规则允许在多个规则中为同一个目标指定不同的重建目标的命令).</p>
+
+<blockquote>
+  <p><strong>注意</strong>:</p>
+
+  <p>Makefile 中, 一个目标<strong>可以</strong>出现在多个规则中, 但是这这些规则必须是同一类型的规则, 要么都是普通规则, 要么都是双冒号规则. 而不允许一个目标同时出现在两种不同类型的规则中</p>
+</blockquote>
+
+<p>双冒号规则和普通规则的处理的不同点表现在以下几个方面:</p>
+
+<ol>
+  <li>双冒号规则中, 当依赖文件比目标更新时规则将会被执行. 对于一个没有依赖而只有命令行的双冒号规则, 当引用此目标时, 规则的命令将会被无条件执行. 而普通规则, 当规则的目标文件存在时, 此规则的命令永远不会被执行(目标文件永远是最新的). <strong>???</strong></li>
+  <li>当同一个文件作为多个双冒号规则的目标时, 这些不同的规则会被独立的处理, 而不是像普通规则那样合并所有的依赖到一个目标文件. 这就意味着对这些规则的处理就像多个不同的普通规则一样. 就是说多个双冒号规则中的每一个的依赖文件被改变之后, make 只执行此规则定义的命令, 而其它的以这个文件作为目标的双冒号规则将不会被执行.</li>
+</ol>
+
+<p>我们来看一个例子, 在我们的 Makefile 中包含以下两个规则:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">Newprog </span><span class="o">::</span> <span class="nf">foo.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> <span class="nv">$&lt;</span> <span class="nt">-o</span> <span class="nv">$@</span>
+
+<span class="nl">Newprog </span><span class="o">::</span> <span class="nf">bar.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> <span class="nv">$&lt;</span> <span class="nt">-o</span> <span class="nv">$@</span>
+</code></pre></div></div>
+
+<p>如果 <code class="language-plaintext highlighter-rouge">foo.c</code> 文件被修改, 执行 make 以后将根据 <code class="language-plaintext highlighter-rouge">foo.c</code> 文件重建目标 <code class="language-plaintext highlighter-rouge">Newprog</code>. 而如果 <code class="language-plaintext highlighter-rouge">bar.c</code> 被修改那么 <code class="language-plaintext highlighter-rouge">Newprog</code> 将根据 <code class="language-plaintext highlighter-rouge">bar.c</code> 被重建. 回想一下, 如果以上两个规则为普通规时出现的情况是什么? (make 将会出错并提示错误信息).</p>
+
+<p>当同一个目标出现在多个双冒号规则中时, 规则的执行顺序和普通规则的执行顺序一样, 按照其在 Makefile 中的书写顺序执行.</p>
+
+<p>GNU make 的双冒号规则给我们提供一种根据依赖的更新情况而执行不同的命令来重建同一目标的机制. 一般这种需要的情况很少, 所以双冒号规则的使用比较罕见. 一般双冒号规则都需要定义命令, 如果一个双冒号规则没有定义命令, 在执行规则时将为其目标自动查找隐含规则.</p>
+
+<h3 id="414-自动产生依赖">4.14 自动产生依赖</h3>
+
+<p>Makefile 中, 有时要书写一些规则描述一个 <code class="language-plaintext highlighter-rouge">.o</code> 文件和头文件的依赖关系. 例如, 如果在 <code class="language-plaintext highlighter-rouge">main.c</code> 中使用 <code class="language-plaintext highlighter-rouge">#include defs.h</code>, 那么我们可能就需要一个像下边那样的规则来描述当头文件 <code class="language-plaintext highlighter-rouge">defs.h</code> 被修改以后再次执行 make, 目标 <code class="language-plaintext highlighter-rouge">main.o</code> 应该被重建.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">main.o</span><span class="o">:</span> <span class="nf">defs.h</span>
+</code></pre></div></div>
+
+<p>这样, 对于一个大型工程就需要在 Makefile 中书写很多条类似于这样的规则. 并且, 当在源文件中加入或删除头文件后, 也需要小心地去修改 Makefile. 这是一件非常费力费时并且危险(容易出错误)的工作. 为了避免这个讨厌的问题, 现代的 c 编译器提供了通过查找源文件中的 <code class="language-plaintext highlighter-rouge">#include</code> 来自动产生这种依赖关系的功能.</p>
+
+<p>Gcc 通过 <code class="language-plaintext highlighter-rouge">-M</code> 选项来实现此功能, 使用 <code class="language-plaintext highlighter-rouge">-M</code> 选项 gcc 将自动找寻源文件中包含的头文件, 并生成文件的依赖关系. 例如, 如果 <code class="language-plaintext highlighter-rouge">main.c</code> 只包含了头文件 <code class="language-plaintext highlighter-rouge">defs.h</code>, 那么执行下面的命令(使用 <code class="language-plaintext highlighter-rouge">-MM</code> 选项可以屏蔽 <code class="language-plaintext highlighter-rouge">-M</code> 里面输出的标准库头文件):</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>gcc <span class="nt">-M</span> main.c
+</code></pre></div></div>
+
+<p>其输出是:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">main.o </span><span class="o">:</span> <span class="nf">main.c defs.h</span>
+</code></pre></div></div>
+
+<p>在使用 gcc 自动产生依赖关系时, 所产生的规则中明确的指明了目标是 <code class="language-plaintext highlighter-rouge">main.o</code>. 一次在通过 <code class="language-plaintext highlighter-rouge">.c</code> 文件直接产生可执行文件时, 作为中间过程文件的 <code class="language-plaintext highlighter-rouge">main.o</code> 在使用完之后将不会被删除.</p>
+
+<p>在旧版本的 make 中, 使用编译器此项功能通常的做法是在 Makefile 中书写一个伪目标 <code class="language-plaintext highlighter-rouge">depend</code> 的规则来定义自动产生依赖关系文件的命令. 输入 <code class="language-plaintext highlighter-rouge">make depend</code> 将生成一个称为 <code class="language-plaintext highlighter-rouge">depend</code> 的文件, 其中包含了所有源文件的依赖规则描述. Makefile 中使用 <code class="language-plaintext highlighter-rouge">include</code> 指示符包含这个文件.</p>
+
+<p>在新版本的 make 中, 推荐的方式是为每一个源文件产生一个描述其依赖关系的 makefile 文件. 对于一个源文件 <code class="language-plaintext highlighter-rouge">NAME.c</code>, 对应的这个 makefile 文件为 <code class="language-plaintext highlighter-rouge">NAME.d</code>. <code class="language-plaintext highlighter-rouge">NAME.d</code> 中描述了文件 <code class="language-plaintext highlighter-rouge">NAME.o</code> 所要依赖的所有头文件. 采用这种方式, 只有源文件在修改之后才会重新使用命令生成新的依赖关系描述文件 <code class="language-plaintext highlighter-rouge">NAME.o</code>.</p>
+
+<p>我们可以使用如下的模式规则来自动生成每一个 <code class="language-plaintext highlighter-rouge">.c</code> 文件对应的 <code class="language-plaintext highlighter-rouge">.d</code> 文件(注意看 sed 把 <code class="language-plaintext highlighter-rouge">%.o, %.d</code> 文件当做规则的依赖):</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">%.d</span><span class="o">:</span> <span class="nf">%.c</span>
+	<span class="p">$(</span>CC<span class="p">)</span> <span class="nt">-MM</span> <span class="p">$(</span>CFLAGS<span class="p">)</span> <span class="nv">$&lt;</span> <span class="o">&gt;</span> <span class="nv">$@</span>.<span class="nv">$$$$</span><span class="p">;</span> <span class="se">\</span>
+    <span class="nb">sed</span> <span class="s1">'s,\($*\)\.o[ :]*,\1.o $@ : ,g'</span> &lt; <span class="nv">$@</span>.<span class="nv">$$$$</span> <span class="o">&gt;</span> <span class="nv">$@</span><span class="p">;</span> <span class="se">\</span>
+    <span class="nb">rm</span> <span class="nt">-f</span> <span class="nv">$@</span>.<span class="nv">$$$$</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong>注意</strong>:</p>
+
+  <p>注意 sed 里面的自动变量 <code class="language-plaintext highlighter-rouge">$*</code>, <code class="language-plaintext highlighter-rouge">$@</code>, <code class="language-plaintext highlighter-rouge">$$$$</code>, 其中 <code class="language-plaintext highlighter-rouge">$$$$</code> 代表当前 make 进程号(实际上 shell 执行的是 <code class="language-plaintext highlighter-rouge">$$</code>, makefile 写法转义了)</p>
+</blockquote>
+
+<p>使用上例的规则就可以建立一个描述目标文件依赖关系的 <code class="language-plaintext highlighter-rouge">.d</code> 文件. 我们可以在 Makefile 中使用 <code class="language-plaintext highlighter-rouge">include</code> 指示符将描述将这个文件包含进来. 在执行 make 时, Makefile 所包含的所有 <code class="language-plaintext highlighter-rouge">.d</code> 文件就会被自动创建或者更新. Makefile 中对当前目录下 <code class="language-plaintext highlighter-rouge">.d</code> 文件处理可以参考如下:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">sources</span> <span class="o">=</span> foo.c bar.c
+<span class="k">sinclude</span><span class="sx"> $(sources:.c=.d)</span>
+</code></pre></div></div>
+
+<p>例子中, 变量 <code class="language-plaintext highlighter-rouge">sources</code> 定义了当前目录下的需要编译的源文件. 变量引用置换 <code class="language-plaintext highlighter-rouge">$(sources: .c=.d)</code> 的功能是根据变量 <code class="language-plaintext highlighter-rouge">source</code> 指定的 <code class="language-plaintext highlighter-rouge">.c</code> 文件自动产生对应的 <code class="language-plaintext highlighter-rouge">.d</code> 文件, 并在当前 Makefile 文件中包 含这些 <code class="language-plaintext highlighter-rouge">.d</code> 文件. <code class="language-plaintext highlighter-rouge">.d</code> 文件和其它的 makefile 文件一样, make 在执行时读取并试图重建它们. 其实这些 <code class="language-plaintext highlighter-rouge">.d</code> 文件也是一些可被 make 解析的 makefile 文件.</p>
+
+<p>需要注意的是 <code class="language-plaintext highlighter-rouge">include</code> 指示符的书写顺序, 因为在这些 <code class="language-plaintext highlighter-rouge">.d</code> 文件中已经存在规则. 当一个 Makefile 使用指示符 include 这些 <code class="language-plaintext highlighter-rouge">.d</code> 文件时, 应该注意它应该出现在终极目标之后, 以免 <code class="language-plaintext highlighter-rouge">.d</code> 文件中的规则被是 Makefile 的终极规则. 关于这个前面我们已经有了比较详细的讨论.</p>
+
+<h2 id="第五章---规则的命令">第五章 - 规则的命令</h2>
+
+<h3 id="51-命令回显">5.1 命令回显</h3>
+
+<p>通常 make 在执行命令行之前会把要执行的命令行输出到标准输出设备. 我们称之为 <code class="language-plaintext highlighter-rouge">回显</code>, 就好像我们在 shell 环境下输入命令执行时一样. 但是, 如果规则的命令行以字符 <code class="language-plaintext highlighter-rouge">@</code> 开始, 则 make 在执行这个命令时就不会回显这个将要被执行的命令. 典型的用法是在使用 <code class="language-plaintext highlighter-rouge">echo</code> 命令输出一些信息时. 如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="err">@echo</span> <span class="err">开始编译</span> <span class="err">XXX</span> <span class="err">模块......</span>
+</code></pre></div></div>
+
+<p>执行时, 将会得到 <code class="language-plaintext highlighter-rouge">开始编译 XXX 模块......</code> 这条输出信息. 如果在命令行之前没有字符 <code class="language-plaintext highlighter-rouge">@</code>, 那么, make 的输出将是:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>echo 开始编译 XXX 模块......
+开始编译 XXX 模块......
+</code></pre></div></div>
+
+<p>另外, 如果使用 make 的命令行参数 <code class="language-plaintext highlighter-rouge">-n</code> 或 <code class="language-plaintext highlighter-rouge">--just-print</code>, 那么 make 执行时只显示所要执行的命令, 但不会真正的去执行这些命令. 只有在这种情况下 make 才会打印出所有 make 需要执行的命令, 其中也包括了使用 <code class="language-plaintext highlighter-rouge">@</code> 字符开始的命令. 这个选项对于我们调试 Makefile 非常有用, 使用这个选项我们可以按执行顺序打印出 Makefile 中所有需要执行的所有命令.</p>
+
+<p>而 make 参数 <code class="language-plaintext highlighter-rouge">-s</code> 或 <code class="language-plaintext highlighter-rouge">--slient</code> 则是禁止所有执行命令的显示, 就好像所有的命令行均使用 <code class="language-plaintext highlighter-rouge">@</code> 开始一样. 在 Makefile 中使用没有依赖的特殊目标 <code class="language-plaintext highlighter-rouge">.SILENT</code> 也可以禁止命令的回显, 但是它不如使用 <code class="language-plaintext highlighter-rouge">@</code> 来的灵活. 因此在书写 Makefile 时, 我们推荐使用 <code class="language-plaintext highlighter-rouge">@</code> 来控制命令的回显.</p>
+
+<h3 id="52-命令的执行">5.2 命令的执行</h3>
+
+<p>规则中, 当目标需要被重建时. 此规则所定义的命令将会被执行, 如果是多行命令, 那么<strong>每一行命令将在一个独立的子 shell 进程中被执行</strong>(就是说, 每一行命令的执行是在一个独立的 shell 进程中完成). 因此, 多行命令之间的执行是相互独立的, 相互之间不存在依赖(多条命令行的执行为多个相互独立的进程).</p>
+
+<p>在 Makefile 中书写在同一行中的多个命令属于一个完整的 shell 命令行, 书写在独立行的一条命令是一个独立的 shell 命令行. 因此: 在一个规则的命令中, 命令行 <code class="language-plaintext highlighter-rouge">cd</code> 改变目录不会对其后的命令的执行产生影响. 就是说其后的命令执行的工作目录不会是之前使用 <code class="language-plaintext highlighter-rouge">cd</code> 进入的那个目录. 如果要实现这个目的, 就不能把 <code class="language-plaintext highlighter-rouge">cd</code> 和其后的命令放在两行来书写. 而应该把这两条命令写在一行上, 用分号分隔. 这样它们才是一个完整的 shell 命令行. 如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">foo </span><span class="o">:</span> <span class="nf">bar/lose</span>
+	<span class="nb">cd </span>bar<span class="p">;</span> gobble lose <span class="o">&gt;</span> ../foo
+</code></pre></div></div>
+
+<p>如果希望把一个完整的 shell 命令行书写在多行上, 需要使用反斜杠 <code class="language-plaintext highlighter-rouge">\</code> 来对处于多行的命令进行连接, 表示他们是一个完整的 shell 命令行. 例如上例我们以也可以这样书写:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">foo </span><span class="o">:</span> <span class="nf">bar/lose</span>
+	<span class="nb">cd </span>bar <span class="se">\</span>
+    gobble lose <span class="o">&gt;</span> ../foo
+</code></pre></div></div>
+
+<p>make 对所有规则命令的解析使用环境变量 <code class="language-plaintext highlighter-rouge">SHELL</code> 所指定的那个程序, 在 GNU make 中, 默认的程序是 <code class="language-plaintext highlighter-rouge">/bin/sh</code>.</p>
+
+<p>不像其他绝大多数变量, 它们的值可以直接从同名的系统环境变量那里获得. make 的环境变量 <code class="language-plaintext highlighter-rouge">SHELL</code> 没有使用系统环境变量的定义. 因为系统环境变量 <code class="language-plaintext highlighter-rouge">SHELL</code> 指定那个程序被用来作为用户和系统交互的接口程序, 它对于不存在直接交互过程的 make 显然不合适. 在 make 的环境变量中 <code class="language-plaintext highlighter-rouge">SHELL</code> 会被重新赋值. 它作为一个变量我们也可以在 Makefile 中明确地给它赋值(指出解释程序的名字, 当明确指定时需要使用完整的路径名. 如 <code class="language-plaintext highlighter-rouge">/bin/sh</code>).</p>
+
+<h3 id="53-并发执行命令">5.3 并发执行命令</h3>
+
+<p>GNU make 支持同时执行多条命令.</p>
+
+<p>通常情况下, 同一时刻只有一个命令在执行, 下一个命令只有在当前命令执行完成之后才能够开始执行. 不过可以通过 make 的命令行选项 <code class="language-plaintext highlighter-rouge">-j</code> 或者 <code class="language-plaintext highlighter-rouge">--job</code> 来告诉 make 在同一时刻可以允许多条命令同时被执行(注意, 在 MS-DOS 中此选项无效, 因为它是单任务操作系统).</p>
+
+<p>如果选项 <code class="language-plaintext highlighter-rouge">-j</code> 之后存在一个整数, 其含义是告诉 make 在同一时刻可允许同时执行命令的数目. 这个数字被称为 <code class="language-plaintext highlighter-rouge">job slots</code>. 当 <code class="language-plaintext highlighter-rouge">-j</code> 选项之后没有出现一个数字时, 那么同一时刻执行的命令数目没有要求. 使用默认的 <code class="language-plaintext highlighter-rouge">job slots</code>, 值为 1, 表示 make 将串行的执行规则的命令(同一时 刻只能有一条命令被执行).</p>
+
+<p>并行执行命令所带来的问题是显而易见的:</p>
+
+<ol>
+  <li>多个同时执的命令的输出信息将同时被输出到终端. 当出现错误时很难根据一大堆凌乱的信 息来区分是哪条命令执行错误.</li>
+  <li>
+    <p>在同一时刻可能会存在多个命令执行进程同时读取标准输入, 但是对于标准输入设备来说, 在同一时刻只能存在一个进程访问它. 就是说在某个时间点, make 只能保证此刻正在执行的进程中的一个进程读取标准输入流, 而其它进程的标准输入流将置无效. 因此在一时刻多个执行命令的进程中只能有一个进程获得标准输入, 而其它需要读取标准输入流的进程由于输入流无效而导致致命错误(通常此进程会得到操作系统的管道破裂信号而被终止).</p>
+
+    <p>这是因为: 执行中的命令在什么时候会读取标准输入流(终端输入或重定向的标准输入)是不可预测的. 而得到标准输入的顺序总是按照先来先获得的原则. 那个命令首先被执行, 那么它就可以首先得到标准输入设备. 而其它后续需要获取标准输入设备的命令执行进程, 由于不能得到标准输入而产生致命错误. 在 Makefile 规则中如果存在很多命令需要读取标准输入设备, 而它们又被允许并行执行时, 就会出现这样的错误. 为了解决这个问题. 我们可以修改 Makefile 规则的命令使之在执行过程中避免使用标准输入. 当然也可以只存在一个命令在执行时会访问标准输入流的 Makefile.</p>
+  </li>
+  <li>会导致 make 的递归调用出现问题.</li>
+</ol>
+
+<p>当 make 在执行命令时, 如果某一条命令执行失败(被一个信号中止, 或非零退出), 且该条命令产生的错误不可忽略, 那么其它的用于重建同一目标的命令执行也将会被终止. 此种情况下, 如果 make 没有使用 <code class="language-plaintext highlighter-rouge">-k</code> 或 <code class="language-plaintext highlighter-rouge">--keep-going</code> 选项, make 将停止执行而退出. 另外如果 make 在执行时, 由某种原因(包括信号)被中止, 此时它的子进程(那些执行规则命令行的 shell 子进程)正在运行, 那么 make 将等到所有这些子进程结束之后才真正退出.</p>
+
+<p>执行 make 时, 如果系统运行于重负荷状态下, 我们需要控制(减轻)系统在执行 make 时的 负荷. 可以使用 <code class="language-plaintext highlighter-rouge">-l</code> 选项告诉 make 限制当前运行的任务的数量(make 所限制的只是它本身所需 要占用的系统负载, 而不能通过它去控制其它的任务所占用的系统负载). <code class="language-plaintext highlighter-rouge">-l</code> 或 <code class="language-plaintext highlighter-rouge">--max-load</code> 选 项一般后边需要跟一个浮点数. 如 <code class="language-plaintext highlighter-rouge">-l 2.5</code>, 它的意思是告诉 make 当系统平均负荷高于 2.5 时, 不再启动任何执行命令的子任务. 不带浮点数的 <code class="language-plaintext highlighter-rouge">-l</code> 选项用于取消前面通 <code class="language-plaintext highlighter-rouge">-l</code> 给定的负荷限制. 更为准确一点就是, 每一次 make 在启动一项任务之前(当前系统至少存在 make 的子任务正在运行), 首先 make 会检查当前系统的负荷, 如果当前系统的负荷高于通过 <code class="language-plaintext highlighter-rouge">-l</code> 选项指定的值, 那么 make 就不会在其他任务完成之前启动任何任务. 缺省情况下没有负荷限制.</p>
+
+<h3 id="54-命令执行的错误">5.4 命令执行的错误</h3>
+
+<p>通常规则中的命令在运行结束后, make 会检测命令执行的返回状态, 如果返回成功, 那么就启动另外一个子 shell 来执行下一条命令. 规则中的所有命令执行完成之后, 这个规则就执行完成了. 如果一个规则中的某一个命令出错(返回非 0 状态), make 就会放弃对当前规则后续命令的执行, 也有可能会终止所有规则的执行.</p>
+
+<p>一些情况下, 规则中一个命令的执行失败并不代表规则执行的错误. 例如我们使用 <code class="language-plaintext highlighter-rouge">mkdir</code> 命令来确保存在一个目录. 当此目录不存在使我们就建立这个目录, 当目录存在时那么 <code class="language-plaintext highlighter-rouge">mkdir</code> 就会执行失败. 其实我们并不希望 mkdir 在执行失败后终止规则的执行. 为了忽略一些无关命令执行失败的情况, 我们可以在命令之前加一个减号 <code class="language-plaintext highlighter-rouge">-</code> (在 <code class="language-plaintext highlighter-rouge">Tab</code> 字符之后), 来告诉 make 忽略此命令的执行失败. 命令中的 <code class="language-plaintext highlighter-rouge">-</code> 号会在 shell 解析并执行此命令之前被去掉, shell 所解释的只是纯粹的命令, <code class="language-plaintext highlighter-rouge">-</code> 字符是由 make 来处理的. 例如对于 <code class="language-plaintext highlighter-rouge">clean</code> 目标我们就可以这么写:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">clean</span><span class="o">:</span>
+	<span class="p">-</span><span class="nb">rm </span>edit <span class="p">$(</span>objects<span class="p">)</span> <span class="k">*</span>.d
+</code></pre></div></div>
+
+<p>其含义是: 即使执行 <code class="language-plaintext highlighter-rouge">rm</code> 删除文件失败, make 也继续执行.</p>
+
+<p>在执行 make 时, 如果使用命令行选项 <code class="language-plaintext highlighter-rouge">-i</code> 或者 <code class="language-plaintext highlighter-rouge">—ignore-errors</code>, make 将忽略所有规则中命令执行的错误. 没有依赖的特殊目标 <code class="language-plaintext highlighter-rouge">.IGNORE</code> 在 Makefile 中有同样的效果. 但是 <code class="language-plaintext highlighter-rouge">.IGNORE</code> 的方式已经很少使用, 因为它没有在命令行之前使用 <code class="language-plaintext highlighter-rouge">-</code> 的方式灵活.</p>
+
+<p>当使用 make 的 <code class="language-plaintext highlighter-rouge">-i</code> 选项或者使用 <code class="language-plaintext highlighter-rouge">-</code> 字符来忽略命令执行的错误时, make 始终把命令的执行结果作为成功来对待. 但会提示错误信息, 同时提示这个错误被忽略.</p>
+
+<p>当不使用这种方式来通知 make 忽略命令执行的错误时, 那么在错误发生时, 就意味着定义这个命令规则的目标不能被正确重建, 同样地, 和此目标相关的其它目标也不会被正确重建. 由于先决条件不能建立, 那么后续的命令将不会被执行.</p>
+
+<p>在发生这样情况时, 通常 make 会立刻退出并返回一个非 0 状态, 表示执行失败. 像对待命令执行的错误一样, 我们可以使用 make 的命令行选项 <code class="language-plaintext highlighter-rouge">-k</code> 或者 <code class="language-plaintext highlighter-rouge">--keep-going</code> 来通知 make, 在出现错误时不立即退出, 而是继续后续命令的执行. 直到无法继续执行命令时才异常退出. 例如使用 <code class="language-plaintext highlighter-rouge">-k</code> 参数, 在重建一个 <code class="language-plaintext highlighter-rouge">.o</code> 文件目标时出现错误, make 不会立即退出, 虽然 make 已经知道因为这个错误而无法完成终极目标的重建, 但还是继续完成其它后续的依赖文件的重建. 直到执行最后链接时才错误退出.</p>
+
+<p>一般 make 的 <code class="language-plaintext highlighter-rouge">-k</code> 参数在实际应用中, 主要用于当同时修改了工程中的多个文件后, <code class="language-plaintext highlighter-rouge">-k</code> 参数可以帮助我们确认对那些文件的修改是正确的(可以被编译), 那些文件的修改是不正确的(不能正确编译). 例如我们修改了工程中的 20 个源文件, 修改完成之后使用带 <code class="language-plaintext highlighter-rouge">-k</code> 参数的 make, 它可以一次性找出修改的 20 个文件中哪些是不能被编译.</p>
+
+<p>通常情况下, 执行失败的命令一旦改变了它所在规则的目标文件, 则这个改变了的目标可能就不是一个被正确重建的文件. 但是这个文件的时间戳已经被更新过了(这种情况也会发生在使用一个信号来强制中止命令执行的时候). 因此下一次执行 make 时, 由于时间戳更新它将不会被重建, 将最终导致终极目标不能被正确重建. 为了避免这种错误的出现, 应该在一次 make <strong>执行失败之后</strong> 使用 <code class="language-plaintext highlighter-rouge">make clean</code> 来清除已经重建的所有目标, 之后再执行 make. 我们也可以让 make 自动完成这个动作, 我们只需要在 Makefile 中定义一个特殊的目标 <code class="language-plaintext highlighter-rouge">.DELETE_ON_ERROR</code>. 但是这个做法存在不兼容. 推荐的做法是在 make 执行失败时, 修改错误之后执行 make 之前, 使用 <code class="language-plaintext highlighter-rouge">make clean</code> 明确的删除第一次错误重建的所有目标.</p>
+
+<p>本节的最后, 需要说明的是, 虽然 make 提供了命令行选项来忽略命令执行的错误. 建议对于此选项谨慎使用. 因为在一个大型的工程中, 可能需要对成千个源文件进行编译. 编译过程中的任何一个文件编译的错误都是不能被忽略的, 否则可能最后完成的终极目标是一个让你感到非常迷惑的东西, 它在运行时可能会产生一些莫名奇妙的现象. 这需要我们保证书写的 Makefile 中规则的命令在执行时不会发生错误. 特别需要注意哪些有特殊目的的规则中的命令.</p>
+
+<p>当所有命令都可以被正确执行时, 我们就没有必要为了避免一些讨厌的错误而使用 <code class="language-plaintext highlighter-rouge">-i</code> 选项, 为了实现同样的目的, 我们可以使用其它的一些方式. 例如删除命令可以这样写: <code class="language-plaintext highlighter-rouge">$(RM)</code> 或者 <code class="language-plaintext highlighter-rouge">rm -f</code>, 创建目录的命令 可以这样写: <code class="language-plaintext highlighter-rouge">mkdir --p</code> 等等</p>
+
+<h3 id="55-中断-make-的执行">5.5 中断 make 的执行</h3>
+
+<p>make 在执行命令时如果收到一个致命信号(终止 make), 那么 make 将会删除此过程中已经重建的那些规则的目标文件. 其依据是此目标文件的当前时间戳和 make 开始执行时此文件的时间戳是否相同.</p>
+
+<blockquote>
+  <p>TODO: 上面不是说不会删除吗? 是说收到的信号不同处理方式不同???</p>
+</blockquote>
+
+<p>删除这个目标文件的目的是为了确保下一次 make 时目标文件能够被正确重建. 其原因我们上一节已经有所讨论. 假设正在编译时键入 <code class="language-plaintext highlighter-rouge">Ctrl-c</code>, 此时编译器已经开始写文件 <code class="language-plaintext highlighter-rouge">foo.o</code>, 但是 <code class="language-plaintext highlighter-rouge">Ctrl-c</code> 产生的信号关闭了编译器. 这种情况下文件 <code class="language-plaintext highlighter-rouge">foo.o</code> 可能是不完整的, 但这个内容不完整的 <code class="language-plaintext highlighter-rouge">foo.o</code> 文件的时间戳比源程序 <code class="language-plaintext highlighter-rouge">foo.c</code> 的时间戳新. 如果在 make 收到终止信号后不删除文件 <code class="language-plaintext highlighter-rouge">foo.o</code> 而直接退出, 那么下次执行 make 时此文件被认为已是最新的而不会去重建它. 最后在链 接生成终极目标时由于某一个 <code class="language-plaintext highlighter-rouge">.o</code> 文件的不完整, 可能出现一堆令人难以理解的错误信息, 或者产生了一个不正确的终极目标.</p>
+
+<p>相反, 可以在 Makefile 中将一个目标文件作为特殊目标 <code class="language-plaintext highlighter-rouge">.PRECIOUS</code> 的依赖, 来取消 make 在重建这个目标时, 在异常终止的情况下对这个目标文件的删除动作. 每一次在 make 在重建一个目标之前, 都将首先判断该目标文件是否出现在特殊目标 <code class="language-plaintext highlighter-rouge">.PRECIOUS</code> 的依赖列表中, 决定在终止信号发生时是否要删除这个目标文件. 不删除这种目标文件的原因可能是:</p>
+
+<ol>
+  <li>目标的重建动作是一个原子的不可被中断的过程</li>
+  <li>目标文件的存在仅仅为了记录其重建时间(不关心其内容无)</li>
+  <li>这个目标文件必须一直存在来防止其它麻烦</li>
+</ol>
+
+<h3 id="56-make-的递归执行">5.6 make 的递归执行</h3>
+
+<p>make 的递归过程指的是在 Makefile 中使用 <code class="language-plaintext highlighter-rouge">make</code> 作为一个命令来执行本身或者其它 makefile 文件的过程.</p>
+
+<p>递归调用在一个存在有多级子目录的项目中非常有用. 例如当前目录下存在一个 <code class="language-plaintext highlighter-rouge">subdir</code> 子目录, 在这个子目录中有描述此目录编译规则的 makefile 文件, 在执行 make 时需要从上层目录(当前目录)开始并完成它所有子目录的编译. 那么在当前目录下可以使用这样一个规则来实现对这个子目录的编译:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">subsystem</span><span class="o">:</span>
+	<span class="nb">cd </span>subdir <span class="o">&amp;&amp;</span> <span class="p">$(</span>MAKE<span class="p">)</span>
+</code></pre></div></div>
+
+<p>其等价于规则:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">subsystem</span><span class="o">:</span>
+	<span class="p">$(</span>MAKE<span class="p">)</span> <span class="nt">-C</span> subdir
+</code></pre></div></div>
+
+<p>对这两个规则的命令进行简单说明, 规则中 <code class="language-plaintext highlighter-rouge">$(MAKE)</code> 是对变量 <code class="language-plaintext highlighter-rouge">MAKE</code> 的引用(下一小节将详细讨论 <code class="language-plaintext highlighter-rouge">MAKE</code>, 关于变量可参考第六章 Makefile 中的变量). 第一个规则命令的意思是进入子目录, 然后在子目录下执行 make. 第二个规则使用了 make 的 <code class="language-plaintext highlighter-rouge">-C</code> 选项, 同样是首先进入子目录 而后再执行 make.</p>
+
+<p>书写这样的规则对于我们来说应该不是什么大问题, 但是其中有一些需要我们深入了解的东西, 首先需要了解它如何工作, 上层 make(在当前目录下运行的 make 进程)和下层 make(subdir 目录下运行的 make 进程)之间存在的联系. 也许会发现这两个规则的实现, 使用伪目标更能提高效率.</p>
+
+<p>在 make 的递归调用中, 需要了解一下变量 <code class="language-plaintext highlighter-rouge">CURDIR</code>, 此变量代表 make 的工作目录. 当使用 <code class="language-plaintext highlighter-rouge">-C</code> 选项进入一个子目录后, 此变量将被重新赋值. 总之, 如果在 Makefile 中没有对此变量进行显式的赋值操作, 那么它代表 make 的工作目录. 我们也可以在 Makefile 为这个变量赋一个新的值. 此时这变量将不再代表 make 的工作目录.</p>
+
+<h4 id="561-变量-make">5.6.1 变量 MAKE</h4>
+
+<p>在使用 make 的递归调用时, 在 Makefile 规则的命令行中应该使用变量 <code class="language-plaintext highlighter-rouge">MAKE</code> 来代替直接使用 <code class="language-plaintext highlighter-rouge">make</code>. 上一小节的例子应该这样来书写:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">subsystem</span><span class="o">:</span>
+	<span class="nb">cd </span>subdir <span class="o">&amp;&amp;</span> <span class="p">$(</span>MAKE<span class="p">)</span>
+</code></pre></div></div>
+
+<p>变量 <code class="language-plaintext highlighter-rouge">MAKE</code> 的值是 <code class="language-plaintext highlighter-rouge">make</code>. 如果其值为 <code class="language-plaintext highlighter-rouge">/bin/make</code> 那么上边规则的命令就为 <code class="language-plaintext highlighter-rouge">cd subdir &amp;&amp; /bin/make</code>. 这样做的好处是:当我们使用一个其它版本的 make 程序时, 可以保证最上层使 用的 make 程序和其子目录下执行的 make 程序保持一致.</p>
+
+<blockquote>
+  <p><strong>注意</strong>:
+下面的 <code class="language-plaintext highlighter-rouge">-t</code> 选项用来更新所有目标的时间戳, 而不执行任何规则的命令.</p>
+</blockquote>
+
+<p>另外使用此变量的另外一个特点是: 当规则命令行中变量 MAKE 时, 可以改变 make 的 <code class="language-plaintext highlighter-rouge">-t</code> ( <code class="language-plaintext highlighter-rouge">--touch</code> ), <code class="language-plaintext highlighter-rouge">-n</code> ( <code class="language-plaintext highlighter-rouge">--just-print</code> )和 <code class="language-plaintext highlighter-rouge">-q</code> ( <code class="language-plaintext highlighter-rouge">--question</code> )命令行选项的效果. 它所实现的功能和在规则中命令行首使用字符 <code class="language-plaintext highlighter-rouge">+</code> 的效果相同. 在规则的命令行中使用 <code class="language-plaintext highlighter-rouge">make</code> 代替了 <code class="language-plaintext highlighter-rouge">$(MAKE)</code> 以后, 上例子规则的命令行为 <code class="language-plaintext highlighter-rouge">cd subdir &amp;&amp; make</code>. 在我们执行 <code class="language-plaintext highlighter-rouge">make -t</code>, 结果是仅仅创建一个名为 <code class="language-plaintext highlighter-rouge">subsystem</code> 的文件, 而不会进入到目录 <code class="language-plaintext highlighter-rouge">subdir</code> 去更新此目录下文件的时间戳. 我们使用<code class="language-plaintext highlighter-rouge">-t</code>命令行参数的初衷是对规则中的目标文件的时间戳进行更新. 而如果使 <code class="language-plaintext highlighter-rouge">cd subdir &amp;&amp; $(MAKE)</code> 作为规则的命令行, 执行 <code class="language-plaintext highlighter-rouge">make -t</code> 就可以实现我们的初衷</p>
+
+<p>变量<code class="language-plaintext highlighter-rouge">MAKE</code>的这个特点是: 在规则的命令行中如果使用变量 <code class="language-plaintext highlighter-rouge">MAKE</code>, 标志 <code class="language-plaintext highlighter-rouge">-t</code>, <code class="language-plaintext highlighter-rouge">-n</code> 和 <code class="language-plaintext highlighter-rouge">-q</code> 在这个命令的执行中不起作用. 尽管这些选项是告诉 make 不执行规则的命令行, 但包含变量 <code class="language-plaintext highlighter-rouge">MAKE</code> 的命令行除外, 它们会被正常执行. 同时, 执行 make 的命令行选项参数被通过一个变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 传递给子目录下的 make 程序.</p>
+
+<p>例如, 当使用 make 的命令行选项 <code class="language-plaintext highlighter-rouge">-t</code> 来更新目标的时间戳或者 <code class="language-plaintext highlighter-rouge">-n</code> 选项打印命令时, 这些选项将会被赋值给变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 被传递到下一级的 make 程序中. 在下一级子目录中执行的 make, 这些选项会被附加作为 make 的命令行参数来执行, 和在此目录下使用 <code class="language-plaintext highlighter-rouge">make -t</code> 或者 <code class="language-plaintext highlighter-rouge">make -n</code> 有相同的效果.</p>
+
+<h3 id="57-变量和递归">5.7 变量和递归</h3>
+
+<p>在 make 的递归执行过程中, 上层 make 可以明确指定将一些变量的定义通过环境变量的方式传递给子 make 过程. 没有明确指定需要传递的变量, 上层 make 不会将其所执行的 Makefile 中定义的变量传递给子 make 过程. 使用环境变量传递上层所定义的变量时, 上层所传递给子 make 过程的变量定义不会覆盖子 make 过程所执行 makefile 文件中的同名变量定义.</p>
+
+<p>如果子 make 过程所执行 Makefile 中存在同名变量定义, 则上层传递的变量定义不会覆盖子 Makefile 中定义的值. 就是说如果上层 make 传递的变量和子 make 所执行的 Makefile 中存在重复 的变量定义, 则以子 Makefile 中的变量定义为准. 除非使用 make 的 <code class="language-plaintext highlighter-rouge">-e</code> 选项.</p>
+
+<p>我们在本节第一段中提到, 上层 make 过程要将所执行的 Makefile 中的变量传递给子 make 过程, 需要明确地指出. 在 GNU make 中, 实现此功能的指示符是 <code class="language-plaintext highlighter-rouge">export</code>. 当一个变量使用 <code class="language-plaintext highlighter-rouge">export</code> 进行声明后, 变量和它的值将被加入到当前工作的环境变量中, 以后在 make 执行的所有规则的命令都可以使用这个变量. 而当没有使用指示符 <code class="language-plaintext highlighter-rouge">export</code> 对任何变量进行声明的情况下, 上层 make 只将那些已经初始化的环境变量(在执行 make 之前已经存在的环境变量)和使用命令行指定的变量(如命令 <code class="language-plaintext highlighter-rouge">make CFLAGS +=-g</code> 或者 <code class="language-plaintext highlighter-rouge">make --e CFLAGS +=-g</code> )传递给子 make 程序, 通常这些变量由字符, 数字和下划线组成. 需要注意的是有些 shell 不能处理那些名字中包含除字母/数字/下划线以外的其他字符的变量.</p>
+
+<p>存在两个特殊的变量 <code class="language-plaintext highlighter-rouge">SHELL</code> 和 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code>, 对于这两个变量除非使用指示符 <code class="language-plaintext highlighter-rouge">un-export</code> 对它们进行声明, 它们在整个 make 的执行过程中始终被自动的传递给所有的子 make. 另外一个变量 <code class="language-plaintext highlighter-rouge">MAKEFILES</code>, 如果此变量有值(不为空)那么同样它会被自动的传递给子 make. 在没有使用关键字 <code class="language-plaintext highlighter-rouge">export</code> 声明的变量, make 执行时它们不会被自动传递给子 make, 因此下层 Makefile 中可以定义和上层同名的变量, 不会引起变量定义冲突.</p>
+
+<p>需要将一个在上层定义的变量传递给子 make, 应该在上层 Makefile 中使用指示符 <code class="language-plaintext highlighter-rouge">export</code> 对此变量进行声明. 当不希望将一个变量传递给子 make 时, 可以使用指示符 <code class="language-plaintext highlighter-rouge">unexport</code> 来声明这个变量. 他们的格式如下:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export </span><span class="err">VARIABLE</span> <span class="err">...</span>
+<span class="k">unexport</span> <span class="nv">VARIABLE ...</span>
+</code></pre></div></div>
+
+<p>以上两种格式, 指示符 <code class="language-plaintext highlighter-rouge">export</code> 或者 <code class="language-plaintext highlighter-rouge">unexport</code> 的参数(变量部分), 如果它是对一个变量或者函数的引用, 这些变量或者函数将会被立即展开. 并赋值给 export 或者 unexport 的变量(关于变量展开的过程可参考第六章 Makefile 中的变量). 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">Y</span><span class="o">=</span>Z
+<span class="k">export </span><span class="nv">X</span><span class="o">=</span><span class="p">$(</span>Y<span class="p">)</span>
+</code></pre></div></div>
+
+<p>其实就是 <code class="language-plaintext highlighter-rouge">export X=Z</code>. export 时对变量进行展开, 是为了保证传递给子 make 的变量值有效(使用当前 Makefile 中定义的变量值).</p>
+
+<p><code class="language-plaintext highlighter-rouge">export</code> 更方便的用法是在定义变量的同时对它进行声明. 看下边的几个例子:</p>
+
+<ul>
+  <li>
+    <p>例 1</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export </span><span class="nv">VARIABLE</span> <span class="o">=</span> value
+</code></pre></div>    </div>
+
+    <p>等效于:</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">VARIABLE</span> <span class="o">=</span> value
+<span class="k">export</span> <span class="nv">VARIABLE</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>例 2</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export </span><span class="nv">VARIABLE</span> <span class="o">:=</span> value
+</code></pre></div>    </div>
+
+    <p>等效于:</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">VARIABLE</span> <span class="o">:=</span> value
+<span class="k">export</span> <span class="nv">VARIABLE</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>例 3</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export </span><span class="nv">VARIABLE</span> <span class="o">+=</span> value
+</code></pre></div>    </div>
+
+    <p>等效于:</p>
+
+    <div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">VARIABLE</span> <span class="o">+=</span> value
+<span class="k">export</span> <span class="nv">VARIABLE</span>
+</code></pre></div>    </div>
+  </li>
+</ul>
+
+<blockquote>
+  <p>还记得 <code class="language-plaintext highlighter-rouge">=</code>, <code class="language-plaintext highlighter-rouge">:=</code>, <code class="language-plaintext highlighter-rouge">+=</code> 的区别吗?</p>
+</blockquote>
+
+<p>我们可以看到, 其实在 Makefile 中指示符 <code class="language-plaintext highlighter-rouge">export</code> 和 <code class="language-plaintext highlighter-rouge">unexport</code> 的功能和在 shell 下功能基本相同.</p>
+
+<p>一个不带任何参数的指示符 <code class="language-plaintext highlighter-rouge">export</code> 指示符含义是将此 Makefile 中定义的所有变量传递给子 make 过程. 如果不需要传递其中的某一个变量, 可以单独使用指示符 <code class="language-plaintext highlighter-rouge">unexport</code> 来声明这个变量. 使用 <code class="language-plaintext highlighter-rouge">export</code> 将所有定义的变量传递给子 Makefile 时, 那些名字中包含其它字符(除字母/数字和下划线以外的字符)的变量可能不会被传递给子 make, 对这类特殊命名的变量传递需要明确的使用 <code class="language-plaintext highlighter-rouge">export</code> 指示符对它进行声明. 虽然不带任何参数的 <code class="language-plaintext highlighter-rouge">export</code> 指示符具有特殊的含义, 但是一个不带任何参数的 <code class="language-plaintext highlighter-rouge">unexport</code> 指示符却是没有任何意义的, 它不会对 make 的执行过程(变量的传递)产生任何影响.</p>
+
+<h4 id="571-命令行选项和递归">5.7.1 命令行选项和递归</h4>
+
+<p>在 make 的递归执行过程中. 最上层(可以称之为主控)make 的命令行选项 <code class="language-plaintext highlighter-rouge">-k</code> 、 <code class="language-plaintext highlighter-rouge">-s</code> 等会被自动的通过环境变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 传递给子 make 进程. 传递过程中变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的值会被主控 make 自动的设置为包含执行 make 时的命令行选项的字符串. 如果在执行 make 时通过命令行指定了 <code class="language-plaintext highlighter-rouge">-k</code> 和 <code class="language-plaintext highlighter-rouge">-s</code> 选项, 那么 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的值会被自动设置为 <code class="language-plaintext highlighter-rouge">ks</code>. 子 make 进程在处理时, 会把此环境变量的值作为执行的命令行参数, 因此子 make 过程同样也会有 <code class="language-plaintext highlighter-rouge">-k</code> 和 <code class="language-plaintext highlighter-rouge">-s</code> 这两个命令行选项.</p>
+
+<p>同样, 执行 make 时命令行中给定的一个变量定义(如 <code class="language-plaintext highlighter-rouge">make CFLAGS+=-g</code>), 此变量和它的值(<code class="language-plaintext highlighter-rouge">CFLAGS+=-g</code>)也会借助环境变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 传递给子 make 进程. 可以借助 make 的环境变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 传递我们在主控 make 所使用的命令行选项给子 make 进程. 需要注意的是有几个特殊的命令行选项例外, 他们是: <code class="language-plaintext highlighter-rouge">-C</code> 、 <code class="language-plaintext highlighter-rouge">-f</code> 、 <code class="language-plaintext highlighter-rouge">-o</code> 和 <code class="language-plaintext highlighter-rouge">-W</code>. 这些命令行选项是不会被赋值给变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的.</p>
+
+<p>Make 命令行选项中一个比较特殊的是 <code class="language-plaintext highlighter-rouge">-j</code> 选项. 在支持这个选项的操作系统上, 如果给它指定了一个数值 <code class="language-plaintext highlighter-rouge">N</code> (多任务的系统 unix、Linux 支持, MS-DOS 不支持), 那么主控 make 和子 make 进程会在执行过程中使用通信机制来限制系统在同一时刻(包括所有的递归调用的 make 进程, 否则, 将会导致 make 任务的数目数目无法控制而使别的任务无法到的执行)所执行任务的数目不大于 <code class="language-plaintext highlighter-rouge">N</code>. 另外, 当使用的操作系统不能支持 make 执行过程中的父子间通信, 那么无论在执行主控 make 时指定的任务数目 <code class="language-plaintext highlighter-rouge">N</code> 是多少, 变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 中选项 <code class="language-plaintext highlighter-rouge">-j</code> 的数目会都被设置为 <code class="language-plaintext highlighter-rouge">1</code>, 通过这样来确保系统的正常运转.</p>
+
+<p>执行多级的 make 调用时, 当不希望传递 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的给子 make 时, 需要在调用子 make 是对这个变量进行赋空.</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">subsystem</span><span class="o">:</span>
+    <span class="err">cd</span> <span class="err">subdir</span> <span class="err">&amp;&amp;</span> <span class="err">$(MAKE)</span> <span class="nv">MAKEFLAGS</span><span class="o">=</span>
+</code></pre></div></div>
+
+<p>执行 make 时可以通过命令行来定义一个变量, 像上例中的那样. 前边已经提到过, 这种变量是借助环境 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 来传递给多级调用的子 make 进程的. 其实真正的命令行中的变量定义是通过另外一个变量 <code class="language-plaintext highlighter-rouge">MAKEOVRRIDES</code> 记录的, 在变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的定义中引用了此变量, 所以命令行中的变量定义被记录在环境变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 中被传递下去. 当不希望上层 make 在命令行中定义的变量传递给子 make 时, 可以在上层 Makefile 中把 <code class="language-plaintext highlighter-rouge">MAKEOVERRIDES</code> 赋空(<code class="language-plaintext highlighter-rouge">MAKEOVERRIDES=</code>). 但是这种方式通常很少使用, 建议非万不得已您还是最好不使用这种方式(为了和 POSIX2.0 兼容, 当 Makefile 中出现 <code class="language-plaintext highlighter-rouge">.POSIX</code> 这个特殊的目标时, 在上层 Makefile 中修改变量 <code class="language-plaintext highlighter-rouge">MAKEOVERRIDES</code> 对子 make 不会产生任何影响). 另外, 在一些系统中环境变量值的长度存在一个上限, 因此当 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的值超过一定长度时, 执行过程可能会出现类 似 <code class="language-plaintext highlighter-rouge">Arg list too long</code> 的错误提示.</p>
+
+<p>在某些特殊的场合, 可能需要为所有的 make 进程指定一个统一的命令行选项. 比如说需要给所有的运行的 make 指定 <code class="language-plaintext highlighter-rouge">-k</code> 选项. 实现这个目的, 我们可以在执行 make 之前设置一个系统环境变量(存在于当前系统的环境中) <code class="language-plaintext highlighter-rouge">MAKEFLAGS=k</code>, 或者在主控 Makefile 中将它的值赋为 <code class="language-plaintext highlighter-rouge">k</code>.</p>
+
+<p>make 在执行时, 首先将会对变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的值(系统环境中或者在 Makefile 中设置的)进行分析. 当变量的值不是以连字符(<code class="language-plaintext highlighter-rouge">-</code>)开始时, 将变量的值按字分开, 字之间使用空格分开. 将这些字作为命令行的选项对待(除了选项 <code class="language-plaintext highlighter-rouge">-C</code> 、 <code class="language-plaintext highlighter-rouge">-f</code> 、 <code class="language-plaintext highlighter-rouge">-h</code> 、 <code class="language-plaintext highlighter-rouge">-o</code> 和 <code class="language-plaintext highlighter-rouge">-W</code> 以及他们的长格式, 如果其中包含无效的选项不会提示错误).</p>
+
+<p>最后需要说明的是, 将 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 设置为系统环境变量的做法是不可取的! 因为这样一旦将一些调试选项或者特殊选项作为此变量值的一部分, 在执行 make 时, 会对 make 的正常执行产生潜在的影响. 例如如果变量 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 中包含选项 <code class="language-plaintext highlighter-rouge">t</code> 、 <code class="language-plaintext highlighter-rouge">n</code> 、 <code class="language-plaintext highlighter-rouge">q</code> 这三个的任何一个, 当执行 make 的结果可能就不是你所要的. 建议大家最好不要随便更改 <code class="language-plaintext highlighter-rouge">MAKEFLAGS</code> 的值, 更不要把它设置为系统的环境变量来使用. 否则可能会产生一些奇怪甚至让你感到不解的现象</p>
+
+<h4 id="572--w-选项">5.7.2 -w 选项</h4>
+
+<p>在多级 make 的递归调用过程中, 选项 <code class="language-plaintext highlighter-rouge">-w</code> 或者 <code class="language-plaintext highlighter-rouge">--print-directory</code> 可以让 make 在开始编译一个目录之前和完成此目录的编译之后给出相应的提示信息, 方便开发人员跟踪 make 的执行过 程. 例如在目录 <code class="language-plaintext highlighter-rouge">/u/gnu/make</code> 目录下执行 <code class="language-plaintext highlighter-rouge">make -w</code> , 将会看到如下的一些信息: 在开始执行之前我们将看到:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>make: Entering directory `/u/gnu/make'.
+</code></pre></div></div>
+
+<p>而在完成之后我们同样将会看到:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>make: Leaving directory `/u/gnu/make'.
+</code></pre></div></div>
+
+<p>通常, 选项 <code class="language-plaintext highlighter-rouge">-w</code> 会被自动打开. 在主控 Makefile 中当如果使用 <code class="language-plaintext highlighter-rouge">-C</code> 参数来为 make 指定一个目录或者使用 <code class="language-plaintext highlighter-rouge">cd</code> 进入一个目录时, <code class="language-plaintext highlighter-rouge">-w</code> 选项会被自动打开. 主控 make 可以使用选项 <code class="language-plaintext highlighter-rouge">-s</code> ( <code class="language-plaintext highlighter-rouge">--slient</code> )来禁止此选项. 另外, make 的命令行选项 <code class="language-plaintext highlighter-rouge">--no-print-directory</code>, 将禁止所有关于目录 信息的打印.</p>
+
+<h3 id="58-定义命令包">5.8 定义命令包</h3>
+
+<p>书写 Makefile 时, 可能有多个规则会使用相同的一组命令. 就像 c 语言程序中需要经常使用到函数 <code class="language-plaintext highlighter-rouge">printf</code>. 这时我们就会想能不能将这样一组命令进行类似 c 语言函数一样的封装, 以后在我们需要用到的地方可以通过它的名字(c 语言中的函数名)来对这一组命令进行引用. 这样就可减少重复工作, 提高了效率. 在 GNU make 中, 可以使用指示符 <code class="language-plaintext highlighter-rouge">define</code> 来完成这个功能. 通过 <code class="language-plaintext highlighter-rouge">define</code> 来定义这样一组命令, 同时用一个变量(作为一个变量, 不能和 Makefile 中其它常规的变量命名出现冲突)来代表这一组命令. 通常我们把使用 <code class="language-plaintext highlighter-rouge">define</code> 定义的 一组命令称为一个命令包. 定义一个命令包的语法以 <code class="language-plaintext highlighter-rouge">define</code> 开始, 以 <code class="language-plaintext highlighter-rouge">endef</code> 结束, 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">define</span> <span class="nv">run-yacc</span>
+<span class="err">yacc</span> <span class="nf">$(</span><span class="nb">firstword</span> <span class="nv">$^</span><span class="p">)</span>
+<span class="err">mv</span> <span class="err">y.tab.c</span> <span class="err">$@</span>
+<span class="k">endef</span>
+</code></pre></div></div>
+
+<p>这里 <code class="language-plaintext highlighter-rouge">run-yacc</code> 是这个命令包的名字. 在 <code class="language-plaintext highlighter-rouge">define</code> 和 <code class="language-plaintext highlighter-rouge">endef</code> 之间的命令就是命令包的主体. 需要说明的是, 使用 <code class="language-plaintext highlighter-rouge">define</code> 定义的命令包中, 命令体中变量和函数的引用不会展开. 命令体中所有的内容包括 <code class="language-plaintext highlighter-rouge">$</code> 、 <code class="language-plaintext highlighter-rouge">(</code> 、 <code class="language-plaintext highlighter-rouge">)</code> 等都是变量 <code class="language-plaintext highlighter-rouge">run-yacc</code> 的定义. 它和 c 语言中宏的使用方式一样. 关于变量可参考第六章 Makefile 中的变量.</p>
+
+<p>例子中, 命令包中第一个命令是对引用它所在规则中的第一个依赖文件运行 yacc 程序. yacc 程序总是生成一个命名为 <code class="language-plaintext highlighter-rouge">y.tab.c</code> 的文件. 第二行的命令就是把这个文件名改为规则目标的名字.</p>
+
+<p>定义了这样一个命令包后, 后续应该如何使用它?前面已经提到, 命令包是使用一个变量来表示的. 因此我们就可以按使用变量的方式来使用它. 当在规则的命令行中使用这个变量时, 命令包 所定义的命令体就会对它进行替代. 由于使用 <code class="language-plaintext highlighter-rouge">define</code> 定义的变量属于递归展开式变量, 因此, 命令包中所有命令中对其它变量的引用, 在规则被执行时会被完全展开. 例如这样一个规则:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">foo.c </span><span class="o">:</span>
+	foo.y <span class="p">$(</span>run-yacc<span class="p">)</span>
+</code></pre></div></div>
+
+<p>此规则在执行时, 我们来看一下命令包中的变量的替换过程:</p>
+
+<ol>
+  <li>命令包中的 <code class="language-plaintext highlighter-rouge">$^</code> 会被 <code class="language-plaintext highlighter-rouge">foo.y</code> 替 换;</li>
+  <li><code class="language-plaintext highlighter-rouge">$@</code> 被 <code class="language-plaintext highlighter-rouge">foo.c</code> 替换.</li>
+</ol>
+
+<p>当在一个规则中引用一个已定义的命令包时, 命令包中的命令体会被原封不动的展开在引用它的地方(和 c 语言中的宏一样). 这些命令就成为规则的命令. 因此我们也可在定义命令包时使用前缀来控制单独的一个命令行(例如 <code class="language-plaintext highlighter-rouge">@</code> , <code class="language-plaintext highlighter-rouge">-</code> 和 <code class="language-plaintext highlighter-rouge">+</code> ). 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">define</span> <span class="nv">frobnicate</span>
+    <span class="err">@echo</span> <span class="s2">"frobnicating target $@"</span>
+    <span class="err">frob-step-1</span> <span class="err">$&lt;</span> <span class="err">-o</span> <span class="err">$@-step-1</span>
+    <span class="err">frob-step-2</span> <span class="err">$@-step-1</span> <span class="err">-o</span> <span class="err">$@</span>
+<span class="k">endef</span>
+</code></pre></div></div>
+
+<p>此命令包的第一行命令执行前不会被回显, 其它的命令在执行前都被回显.</p>
+
+<p>另一方面, 如果一个规则在引用此命令包之前使用了控制命令的前缀字符. 那么这个前缀字符
+将会被添加到命令包定义的每一个命令行之中. 例如:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">frob.out</span><span class="o">:</span>
+    <span class="err">frob.in</span> <span class="err">@$(frobnicate)</span>
+</code></pre></div></div>
+
+<p>这个规则执行时不会回显任何要执行的命令.</p>
+
+<h3 id="59-空命令">5.9 空命令</h3>
+
+<p>有时可能存在这样的一个需求, 需要定义一个什么也不做的规则(不需要任何执行的命令). 前面已经有过这样的用法. 这样的规则, 只有目标文件(可以存在依赖文件)而没有命令行. 像这样定义:</p>
+
+<div class="language-makefile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">target</span><span class="o">:</span> <span class="nf">;</span>
+</code></pre></div></div>
+
+<p>这就是一个空命令的规则, 为目标 <code class="language-plaintext highlighter-rouge">target</code> 定义了一个空命令. 也可以使用独立的命令行格式来定义, 需要注意的是独立的命令行必须以 <code class="language-plaintext highlighter-rouge">Tab</code> 字符开始. 一般在定义空命令时, 建议不使用命令行的方式, 因为看起来空命令行和空行在感觉上没有区别.</p>
+
+<p>大家会奇怪为什么要定义一个没有命令的规则. 其唯一的原因是, 空命令行可以防止 make 在执行时试图为重建这个目标去查找隐含命令(包括了使用隐含规则中的命令和 <code class="language-plaintext highlighter-rouge">.DEFAULT</code> 指定的命令. 关于隐含规则可参考第十章使用隐含规则), 这一点它和伪目标有相同之处. 需要注意, 在使用空命令的目标时, 如果需要实现一个不是实际文件的目标, 我们只是需要通过使用这个目标来完成对它所依赖的文件的重建动作. 首先应该想到伪目标而不是空命令目标.</p>
+
+<p>因为一个实际不存在的目标文件的依赖文件, 可能不会被正确重建. 因此对于空命令规则, 最好不要给它指定依赖文件. 避免特殊情况下产生错误的情况.</p>
+</div><section class="article__sharing d-print-none"></section><div class="d-print-none"><footer class="article__footer"><meta itemprop="dateModified" content="2016-04-14T22:28:04+08:00"><!-- start custom article footer snippet -->
+
+<!-- end custom article footer snippet -->
+<div class="article__subscribe"><div class="subscribe"><i class="fas fa-rss"></i> <a type="application/rss+xml" href="/feed.xml">订阅</a></div>
+</div><div class="article__license"></div></footer>
+<div class="article__section-navigator clearfix"><div class="previous"><span>上篇</span><a href="/2016/01/06/reactjs-tutorial.html">React基本教程</a></div><div class="next"><span>下篇</span><a href="/2016/08/16/raining-day.html">雨天</a></div></div></div>
+
+</div>
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    $(function() {
+      var $this ,$scroll;
+      var $articleContent = $('.js-article-content');
+      var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+      var scroll = hasSidebar ? '.js-page-main' : 'html, body';
+      $scroll = $(scroll);
+
+      $articleContent.find('.highlight').each(function() {
+        $this = $(this);
+        $this.attr('data-lang', $this.find('code').attr('data-lang'));
+      });
+      $articleContent.find('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]').each(function() {
+        $this = $(this);
+        $this.append($('<a class="anchor d-print-none" aria-hidden="true"></a>').html('<i class="fas fa-anchor"></i>'));
+      });
+      $articleContent.on('click', '.anchor', function() {
+        $scroll.scrollToAnchor('#' + $(this).parent().attr('id'), 400);
+      });
+    });
+  });
+})();
+</script>
+</div><section class="page__comments d-print-none"></section></article><!-- start custom main bottom snippet -->
+
+<!-- end custom main bottom snippet -->
+</div>
+            </div></div></div><div class="page__footer d-print-none">
+<footer class="footer py-4 js-page-footer">
+    <div class="main"><div itemscope itemtype="http://schema.org/Person">
+        <meta itemprop="name" content="Zhigang Song"><meta itemprop="url" content="/"><meta itemprop="description" content="一个安静的程序员"><div class="footer__author-links"><div class="author-links">
+  <ul class="menu menu--nowrap menu--inline"><li title="在 Github 上关注我。">
+        <a class="button button--circle github-button" itemprop="sameAs" href="https://github.com/sidgwick" target="_blank">
+          <div class="icon"><svg fill="#000000" width="24px" height="24px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <path class="svgpath" data-index="path_0" fill="#272636" d="M0 525.2c0 223.6 143.3 413.7 343 483.5 26.9 6.8 22.8-12.4 22.8-25.4l0-88.7c-155.3 18.2-161.5-84.6-172-101.7-21.1-36-70.8-45.2-56-62.3 35.4-18.2 71.4 4.6 113.1 66.3 30.2 44.7 89.1 37.2 119 29.7 6.5-26.9 20.5-50.9 39.7-69.6C248.8 728.2 181.7 630 181.7 513.2c0-56.6 18.7-108.7 55.3-150.7-23.3-69.3 2.2-128.5 5.6-137.3 66.5-6 135.5 47.6 140.9 51.8 37.8-10.2 80.9-15.6 129.1-15.6 48.5 0 91.8 5.6 129.8 15.9 12.9-9.8 77-55.8 138.8-50.2 3.3 8.8 28.2 66.7 6.3 135 37.1 42.1 56 94.6 56 151.4 0 117-67.5 215.3-228.8 243.7 26.9 26.6 43.6 63.4 43.6 104.2l0 128.8c0.9 10.3 0 20.5 17.2 20.5C878.1 942.4 1024 750.9 1024 525.3c0-282.9-229.3-512-512-512C229.1 13.2 0 242.3 0 525.2L0 525.2z" />
+</svg>
+</div>
+        </a>
+      </li></ul>
+</div>
+</div>
+      </div><div class="site-info mt-2">
+        <div>© Zhigang Song 2015-2024,
+          Powered by <a title="Jekyll is a simple, blog-aware, static site generator." href="http://jekyllrb.com/">Jekyll</a> & <a
+          title="TeXt is a super customizable Jekyll theme." href="https://github.com/kitian616/jekyll-TeXt-theme">TeXt Theme</a>.
+        </div>
+        <div>
+            <a href="https://beian.miit.gov.cn/">豫ICP备19037616号</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+  </div></div>
+    </div><script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $body = $('body'), $window = $(window);
+    var $pageRoot = $('.js-page-root'), $pageMain = $('.js-page-main');
+    var activeCount = 0;
+    function modal(options) {
+      var $root = this, visible, onChange, hideWhenWindowScroll = false;
+      var scrollTop;
+      function setOptions(options) {
+        var _options = options || {};
+        visible = _options.initialVisible === undefined ? false : show;
+        onChange = _options.onChange;
+        hideWhenWindowScroll = _options.hideWhenWindowScroll;
+      }
+      function init() {
+        setState(visible);
+      }
+      function setState(isShow) {
+        if (isShow === visible) {
+          return;
+        }
+        visible = isShow;
+        if (visible) {
+          activeCount++;
+          scrollTop = $(window).scrollTop() || $pageMain.scrollTop();
+          $root.addClass('modal--show');
+          $pageMain.scrollTop(scrollTop);
+          activeCount === 1 && ($pageRoot.addClass('show-modal'), $body.addClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.on('scroll', hide);
+          $window.on('keyup', handleKeyup);
+        } else {
+          activeCount > 0 && activeCount--;
+          $root.removeClass('modal--show');
+          $window.scrollTop(scrollTop);
+          activeCount === 0 && ($pageRoot.removeClass('show-modal'), $body.removeClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.off('scroll', hide);
+          $window.off('keyup', handleKeyup);
+        }
+        onChange && onChange(visible);
+      }
+      function show() {
+        setState(true);
+      }
+      function hide() {
+        setState(false);
+      }
+      function handleKeyup(e) {
+        // Char Code: 27  ESC
+        if (e.which ===  27) {
+          hide();
+        }
+      }
+      setOptions(options);
+      init();
+      return {
+        show: show,
+        hide: hide,
+        $el: $root
+      };
+    }
+    $.fn.modal = modal;
+  });
+})();
+</script><div class="modal modal--overflow page__search-modal d-print-none js-page-search-modal"><script>
+(function () {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    // search panel
+    var search = (window.search || (window.search = {}));
+    var useDefaultSearchBox = window.useDefaultSearchBox === undefined ?
+      true : window.useDefaultSearchBox ;
+
+    var $searchModal = $('.js-page-search-modal');
+    var $searchToggle = $('.js-search-toggle');
+    var searchModal = $searchModal.modal({ onChange: handleModalChange, hideWhenWindowScroll: true });
+    var modalVisible = false;
+    search.searchModal = searchModal;
+
+    var $searchBox = null;
+    var $searchInput = null;
+    var $searchClear = null;
+
+    function getModalVisible() {
+      return modalVisible;
+    }
+    search.getModalVisible = getModalVisible;
+
+    function handleModalChange(visible) {
+      modalVisible = visible;
+      if (visible) {
+        search.onShow && search.onShow();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].focus();
+      } else {
+        search.onShow && search.onHide();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].blur();
+        setTimeout(function() {
+          useDefaultSearchBox && ($searchInput.val(''), $searchBox.removeClass('not-empty'));
+          search.clear && search.clear();
+          window.pageAsideAffix && window.pageAsideAffix.refresh();
+        }, 400);
+      }
+    }
+
+    $searchToggle.on('click', function() {
+      modalVisible ? searchModal.hide() : searchModal.show();
+    });
+    // Char Code: 83  S, 191 /
+    $(window).on('keyup', function(e) {
+      if (!modalVisible && !window.isFormElement(e.target || e.srcElement) && (e.which === 83 || e.which === 191)) {
+        modalVisible || searchModal.show();
+      }
+    });
+
+    if (useDefaultSearchBox) {
+      $searchBox = $('.js-search-box');
+      $searchInput = $searchBox.children('input');
+      $searchClear = $searchBox.children('.js-icon-clear');
+      search.getSearchInput = function() {
+        return $searchInput.get(0);
+      };
+      search.getVal = function() {
+        return $searchInput.val();
+      };
+      search.setVal = function(val) {
+        $searchInput.val(val);
+      };
+
+      $searchInput.on('focus', function() {
+        $(this).addClass('focus');
+      });
+      $searchInput.on('blur', function() {
+        $(this).removeClass('focus');
+      });
+      $searchInput.on('input', window.throttle(function() {
+        var val = $(this).val();
+        if (val === '' || typeof val !== 'string') {
+          search.clear && search.clear();
+        } else {
+          $searchBox.addClass('not-empty');
+          search.onInputNotEmpty && search.onInputNotEmpty(val);
+        }
+      }, 400));
+      $searchClear.on('click', function() {
+        $searchInput.val(''); $searchBox.removeClass('not-empty');
+        search.clear && search.clear();
+      });
+    }
+  });
+})();
+</script><div class="search search--dark">
+  <div class="main">
+    <div class="search__header">搜索</div>
+    <div class="search-bar">
+      <div class="search-box js-search-box">
+        <div class="search-box__icon-search"><i class="fas fa-search"></i></div>
+        <input type="text" />
+        <div class="search-box__icon-clear js-icon-clear">
+          <a><i class="fas fa-times"></i></a>
+        </div>
+      </div>
+      <button class="button button--theme-dark button--pill search__cancel js-search-toggle">
+        取消</button>
+    </div>
+    <div class="search-result js-search-result"></div>
+  </div>
+</div>
+<script>var SOURCES = window.TEXT_VARIABLES.sources;
+var PAHTS = window.TEXT_VARIABLES.paths;
+window.Lazyload.js([SOURCES.jquery, PAHTS.search_js], function() {
+  var search = (window.search || (window.search = {}));
+  var searchData = window.TEXT_SEARCH_DATA || {};
+
+  function memorize(f) {
+    var cache = {};
+    return function () {
+      var key = Array.prototype.join.call(arguments, ',');
+      if (key in cache) return cache[key];
+      else return cache[key] = f.apply(this, arguments);
+    };
+  }
+
+  /// search
+  function searchByQuery(query) {
+    var i, j, key, keys, cur, _title, result = {};
+    keys = Object.keys(searchData);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      for (j = 0; j < searchData[key].length; j++) {
+        cur = searchData[key][j], _title = cur.title;
+        if ((result[key] === undefined || result[key] && result[key].length < 4 )
+          && _title.toLowerCase().indexOf(query.toLowerCase()) >= 0) {
+          if (result[key] === undefined) {
+            result[key] = [];
+          }
+          result[key].push(cur);
+        }
+      }
+    }
+    return result;
+  }
+
+  var renderHeader = memorize(function(header) {
+    return $('<p class="search-result__header">' + header + '</p>');
+  });
+
+  var renderItem = function(index, title, url) {
+    return $('<li class="search-result__item" data-index="' + index + '"><a class="button" href="' + url + '">' + title + '</a></li>');
+  };
+
+  function render(data) {
+    if (!data) { return null; }
+    var $root = $('<ul></ul>'), i, j, key, keys, cur, itemIndex = 0;
+    keys = Object.keys(data);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      $root.append(renderHeader(key));
+      for (j = 0; j < data[key].length; j++) {
+        cur = data[key][j];
+        $root.append(renderItem(itemIndex++, cur.title, cur.url));
+      }
+    }
+    return $root;
+  }
+
+  // search box
+  var $result = $('.js-search-result'), $resultItems;
+  var lastActiveIndex, activeIndex;
+
+  function clear() {
+    $result.html(null);
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+  }
+  function onInputNotEmpty(val) {
+    $result.html(render(searchByQuery(val)));
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+    $resultItems.eq(0).addClass('active');
+  }
+
+  search.clear = clear;
+  search.onInputNotEmpty = onInputNotEmpty;
+
+  function updateResultItems() {
+    lastActiveIndex >= 0 && $resultItems.eq(lastActiveIndex).removeClass('active');
+    activeIndex >= 0 && $resultItems.eq(activeIndex).addClass('active');
+  }
+
+  function moveActiveIndex(direction) {
+    var itemsCount = $resultItems ? $resultItems.length : 0;
+    if (itemsCount > 1) {
+      lastActiveIndex = activeIndex;
+      if (direction === 'up') {
+        activeIndex = (activeIndex - 1 + itemsCount) % itemsCount;
+      } else if (direction === 'down') {
+        activeIndex = (activeIndex + 1 + itemsCount) % itemsCount;
+      }
+      updateResultItems();
+    }
+  }
+
+  // Char Code: 13  Enter, 37  ⬅, 38  ⬆, 39  ➡, 40  ⬇
+  $(window).on('keyup', function(e) {
+    var modalVisible = search.getModalVisible && search.getModalVisible();
+    if (modalVisible) {
+      if (e.which === 38) {
+        modalVisible && moveActiveIndex('up');
+      } else if (e.which === 40) {
+        modalVisible && moveActiveIndex('down');
+      } else if (e.which === 13) {
+        modalVisible && $resultItems && activeIndex >= 0 && $resultItems.eq(activeIndex).children('a')[0].click();
+      }
+    }
+  });
+
+  $result.on('mouseover', '.search-result__item > a', function() {
+    var itemIndex = $(this).parent().data('index');
+    itemIndex >= 0 && (lastActiveIndex = activeIndex, activeIndex = itemIndex, updateResultItems());
+  });
+});
+</script>
+</div></div>
+
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function scrollToAnchor(anchor, duration, callback) {
+      var $root = this;
+      $root.animate({ scrollTop: $(anchor).position().top }, duration, function() {
+        window.history.replaceState(null, '', window.location.href.split('#')[0] + anchor);
+        callback && callback();
+      });
+    }
+    $.fn.scrollToAnchor = scrollToAnchor;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function affix(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroll,
+        offsetBottom = 0, scrollTarget = window, scroll = window.document, disabled = false, isOverallScroller = true,
+        rootTop, rootLeft, rootHeight, scrollBottom, rootBottomTop,
+        hasInit = false, curState;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.offsetBottom && (offsetBottom = _options.offsetBottom);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroll && (scroll = _options.scroll);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $scrollTarget = $(scrollTarget);
+        isOverallScroller = window.isOverallScroller($scrollTarget[0]);
+        $scroll = $(scroll);
+      }
+      function preCalc() {
+        top();
+        rootHeight = $root.outerHeight();
+        rootTop = $root.offset().top + (isOverallScroller ? 0 :  $scrollTarget.scrollTop());
+        rootLeft = $root.offset().left;
+      }
+      function calc(needPreCalc) {
+        needPreCalc && preCalc();
+        scrollBottom = $scroll.outerHeight() - offsetBottom - rootHeight;
+        rootBottomTop = scrollBottom - rootTop;
+      }
+      function top() {
+        if (curState !== 'top') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: 0
+          });
+          curState = 'top';
+        }
+      }
+      function fixed() {
+        if (curState !== 'fixed') {
+          $root.addClass('fixed').css({
+            left: rootLeft + 'px',
+            top: 0
+          });
+          curState = 'fixed';
+        }
+      }
+      function bottom() {
+        if (curState !== 'bottom') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: rootBottomTop + 'px'
+          });
+          curState = 'bottom';
+        }
+      }
+      function setState() {
+        var scrollTop = $scrollTarget.scrollTop();
+        if (scrollTop >= rootTop && scrollTop <= scrollBottom) {
+          fixed();
+        } else if (scrollTop < rootTop) {
+          top();
+        } else {
+          bottom();
+        }
+      }
+      function init() {
+        if(!hasInit) {
+          var interval, timeout;
+          calc(true); setState();
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState();
+          });
+          $window.on('resize', function() {
+            disabled || (calc(true), setState());
+          });
+          hasInit = true;
+        }
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions,
+        refresh: function() {
+          calc(true, { animation: false }); setState();
+        }
+      };
+    }
+    $.fn.affix = affix;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function toc(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroller, $tocUl = $('<ul class="toc toc--ellipsis"></ul>'), $tocLi, $headings, $activeLast, $activeCur,
+        selectors = 'h1,h2,h3', container = 'body', scrollTarget = window, scroller = 'html, body', disabled = false,
+        headingsPos, scrolling = false, hasRendered = false, hasInit = false;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.selectors && (selectors = _options.selectors);
+        _options.container && (container = _options.container);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroller && (scroller = _options.scroller);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $headings = $(container).find(selectors).filter('[id]');
+        $scrollTarget = $(scrollTarget);
+        $scroller = $(scroller);
+      }
+      function calc() {
+        headingsPos = [];
+        $headings.each(function() {
+          headingsPos.push(Math.floor($(this).position().top));
+        });
+      }
+      function setState(element, disabled) {
+        var scrollTop = $scrollTarget.scrollTop(), i;
+        if (disabled || !headingsPos || headingsPos.length < 1) { return; }
+        if (element) {
+          $activeCur = element;
+        } else {
+          for (i = 0; i < headingsPos.length; i++) {
+            if (scrollTop >= headingsPos[i]) {
+              $activeCur = $tocLi.eq(i);
+            } else {
+              $activeCur || ($activeCur = $tocLi.eq(i));
+              break;
+            }
+          }
+        }
+        $activeLast && $activeLast.removeClass('active');
+        ($activeLast = $activeCur).addClass('active');
+      }
+      function render() {
+        if(!hasRendered) {
+          $root.append($tocUl);
+          $headings.each(function() {
+            var $this = $(this);
+            $tocUl.append($('<li></li>').addClass('toc-' + $this.prop('tagName').toLowerCase())
+              .append($('<a></a>').text($this.text()).attr('href', '#' + $this.prop('id'))));
+          });
+          $tocLi = $tocUl.children('li');
+          $tocUl.on('click', 'a', function(e) {
+            e.preventDefault();
+            var $this = $(this);
+            scrolling = true;
+            setState($this.parent());
+            $scroller.scrollToAnchor($this.attr('href'), 400, function() {
+              scrolling = false;
+            });
+          });
+        }
+        hasRendered = true;
+      }
+      function init() {
+        var interval, timeout;
+        if(!hasInit) {
+          render(); calc(); setState(null, scrolling);
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState(null, scrolling);
+          });
+          $window.on('resize', window.throttle(function() {
+            if (!disabled) {
+              render(); calc(); setState(null, scrolling);
+            }
+          }, 100));
+        }
+        hasInit = true;
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions
+      };
+    }
+    $.fn.toc = toc;
+  });
+})();
+/*(function () {
+
+})();*/
+</script><script>
+  /* toc must before affix, since affix need to konw toc' height. */(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  var TOC_SELECTOR = window.TEXT_VARIABLES.site.toc.selectors;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window);
+    var $articleContent = $('.js-article-content');
+    var $tocRoot = $('.js-toc-root'), $col2 = $('.js-col-aside');
+    var toc;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+    var hasToc = $articleContent.find(TOC_SELECTOR).length > 0;
+
+    function disabled() {
+      return $col2.css('display') === 'none' || !hasToc;
+    }
+
+    tocDisabled = disabled();
+
+    toc = $tocRoot.toc({
+      selectors: TOC_SELECTOR,
+      container: $articleContent,
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      tocDisabled = disabled();
+      toc && toc.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window), $pageFooter = $('.js-page-footer');
+    var $pageAside = $('.js-page-aside');
+    var affix;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+
+    affix = $pageAside.affix({
+      offsetBottom: $pageFooter.outerHeight(),
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      scroll: hasSidebar ? $('.js-page-main').children() : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      affix && affix.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+    window.pageAsideAffix = affix;
+  });
+})();
+</script><script type="text/x-mathjax-config">
+	var _config = { tex2jax: {
+		inlineMath: [['$','$'], ['\\(','\\)']]
+	}};MathJax.Hub.Config(_config);
+</script>
+<script type="text/javascript" src="https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
+<script>
+  window.Lazyload.js('https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js', function() {
+    mermaid.initialize({
+      startOnLoad: true
+    });
+    mermaid.init(undefined, '.language-mermaid');
+  });
+</script>
+
+    </div>
+    <script>(function () {
+  var $root = document.getElementsByClassName('root')[0];
+  if (window.hasEvent('touchstart')) {
+    $root.dataset.isTouch = true;
+    document.addEventListener('touchstart', function(){}, false);
+  }
+})();
+</script>
+  </body>
+</html>
+
