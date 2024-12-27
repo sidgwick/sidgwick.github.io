@@ -146,3 +146,49 @@ D --------------------
 3. `hello` 类实例化的时候, 触发了元类的 `__call__` 函数, 等到再次尝试以函数方式调用实例时, 又触发了元类 `__call__` 调用.
 
 > TODO: 第三点是为啥?
+
+---
+
+下面是一段来自 [backtrader](https://github.com/mementum/backtrader) 的代码, 在 backtrader 里面有大量的使用, 这里对它做做一些解释.
+
+```python
+def with_metaclass(meta, *bases):
+    """Create a base class with a metaclass."""
+
+    # This requires a bit of explanation: the basic idea is to make a dummy
+    # metaclass for one level of class instantiation that replaces itself with
+    # the actual metaclass.
+    class metaclass(meta):
+
+        def __new__(cls, name, this_bases, d):
+            print(f"Creating class {name} with metaclass {metaclass}")
+            return meta(name, bases, d)
+
+    return type.__new__(metaclass, str("temporary_class"), (), {})
+
+```
+
+这个函数用来生成一个类定义, 这个类定义有如下特性:
+
+1. 使用 `type.__new__` 来创建类名叫做 temporary_class 的类定义
+2. 这个类的元类是 (metaclass 和 meta), 这两个元类的作用是在 temporary_class 的创建过程中控制创建过程,
+   (metaclass, meta) 两个元类的 **new** 方法会被先后调用, 以达到控制创建过程的目的
+
+看以下代码:
+
+```python
+class MyMeta(type):
+    def __new__(cls, name, bases, dct):
+        print(f"Creating class {name} with metaclass {cls}")
+        return super().__new__(cls, name, bases, dct)
+
+
+MyClass = with_metaclass(MyMeta, object)
+# 到这里, `MyClass` 是以 (`with_classmeta.classmeta`, `MyMeta`) 两个元类为元类的类定义
+
+class MySubClass(MyClass):
+    '''定义一个继承 MyClass 的类'''
+    pass
+```
+
+在上面 MySubClass 定义过程中, (`with_classmeta.classmeta`, `MyMeta`) 的 `__new__` 函数就会被先后调用
