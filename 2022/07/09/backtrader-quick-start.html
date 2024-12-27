@@ -1,0 +1,2525 @@
+<!DOCTYPE html><html lang="zh-CN">
+  <head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"><title>Backtrader 学习系列 - QuickStart - 挚爱荒原</title>
+
+<meta name="description" content="参考原文: https://www.backtrader.com/docu/quickstart/quickstart  IMPORTANT: The data files used in the quickstart guide are updated from time to time, which mean...">
+<link rel="canonical" href="http://sidgwick.github.io/2022/07/09/backtrader-quick-start.html"><link rel="alternate" type="application/rss+xml" title="挚爱荒原" href="/feed.xml"><link rel="stylesheet" href="/assets/css/main.css"><link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css" ><!-- start custom head snippets -->
+
+<!-- end custom head snippets -->
+<script>(function() {
+  window.isArray = function(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  };
+  window.isString = function(val) {
+    return typeof val === 'string';
+  };
+
+  window.hasEvent = function(event) {
+    return 'on'.concat(event) in window.document;
+  };
+
+  window.isOverallScroller = function(node) {
+    return node === document.documentElement || node === document.body || node === window;
+  };
+
+  window.isFormElement = function(node) {
+    var tagName = node.tagName;
+    return tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA';
+  };
+
+  window.pageLoad = (function () {
+    var loaded = false, cbs = [];
+    window.addEventListener('load', function () {
+      var i;
+      loaded = true;
+      if (cbs.length > 0) {
+        for (i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+      }
+    });
+    return {
+      then: function(cb) {
+        cb && (loaded ? cb() : (cbs.push(cb)));
+      }
+    };
+  })();
+})();
+(function() {
+  window.throttle = function(func, wait) {
+    var args, result, thisArg, timeoutId, lastCalled = 0;
+
+    function trailingCall() {
+      lastCalled = new Date;
+      timeoutId = null;
+      result = func.apply(thisArg, args);
+    }
+    return function() {
+      var now = new Date,
+        remaining = wait - (now - lastCalled);
+
+      args = arguments;
+      thisArg = this;
+
+      if (remaining <= 0) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        lastCalled = now;
+        result = func.apply(thisArg, args);
+      } else if (!timeoutId) {
+        timeoutId = setTimeout(trailingCall, remaining);
+      }
+      return result;
+    };
+  };
+})();
+(function() {
+  var Set = (function() {
+    var add = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (data[i] === item) {
+          return;
+        }
+      }
+      this.size ++;
+      data.push(item);
+      return data;
+    };
+
+    var Set = function(data) {
+      this.size = 0;
+      this._data = [];
+      var i;
+      if (data.length > 0) {
+        for (i = 0; i < data.length; i++) {
+          add.call(this, data[i]);
+        }
+      }
+    };
+    Set.prototype.add = add;
+    Set.prototype.get = function(index) { return this._data[index]; };
+    Set.prototype.has = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (this.get(i) === item) {
+          return true;
+        }
+      }
+      return false;
+    };
+    Set.prototype.is = function(map) {
+      if (map._data.length !== this._data.length) { return false; }
+      var i, j, flag, tData = this._data, mData = map._data;
+      for (i = 0; i < tData.length; i++) {
+        for (flag = false, j = 0; j < mData.length; j++) {
+          if (tData[i] === mData[j]) {
+            flag = true;
+            break;
+          }
+        }
+        if (!flag) { return false; }
+      }
+      return true;
+    };
+    Set.prototype.values = function() {
+      return this._data;
+    };
+    return Set;
+  })();
+
+  window.Lazyload = (function(doc) {
+    var queue = {js: [], css: []}, sources = {js: {}, css: {}}, context = this;
+    var createNode = function(name, attrs) {
+      var node = doc.createElement(name), attr;
+      for (attr in attrs) {
+        if (attrs.hasOwnProperty(attr)) {
+          node.setAttribute(attr, attrs[attr]);
+        }
+      }
+      return node;
+    };
+    var end = function(type, url) {
+      var s, q, qi, cbs, i, j, cur, val, flag;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        s[url] = true;
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (cur.urls.has(url)) {
+            qi = cur, val = qi.urls.values();
+            qi && (cbs = qi.callbacks);
+            for (flag = true, j = 0; j < val.length; j++) {
+              cur = val[j];
+              if (!s[cur]) {
+                flag = false;
+              }
+            }
+            if (flag && cbs && cbs.length > 0) {
+              for (j = 0; j < cbs.length; j++) {
+                cbs[j].call(context);
+              }
+              qi.load = true;
+            }
+          }
+        }
+      }
+    };
+    var load = function(type, urls, callback) {
+      var s, q, qi, node, i, cur,
+        _urls = typeof urls === 'string' ? new Set([urls]) : new Set(urls), val, url;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (_urls.is(cur.urls)) {
+            qi = cur;
+            break;
+          }
+        }
+        val = _urls.values();
+        if (qi) {
+          callback && (qi.load || qi.callbacks.push(callback));
+          callback && (qi.load && callback());
+        } else {
+          q.push({
+            urls: _urls,
+            callbacks: callback ? [callback] : [],
+            load: false
+          });
+          for (i = 0; i < val.length; i++) {
+            node = null, url = val[i];
+            if (s[url] === undefined) {
+              (type === 'js' ) && (node = createNode('script', { src: url }));
+              (type === 'css') && (node = createNode('link', { rel: 'stylesheet', href: url }));
+              if (node) {
+                node.onload = (function(type, url) {
+                  return function() {
+                    end(type, url);
+                  };
+                })(type, url);
+                (doc.head || doc.body).appendChild(node);
+                s[url] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+    return {
+      js: function(url, callback) {
+        load('js', url, callback);
+      },
+      css: function(url, callback) {
+        load('css', url, callback);
+      }
+    };
+  })(this.document);
+})();
+</script><script>
+  (function() {
+    var TEXT_VARIABLES = {
+      version: '2.2.6',
+      sources: {
+        font_awesome: 'https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css',
+        jquery: 'https://cdn.bootcss.com/jquery/3.1.1/jquery.min.js',
+        leancloud_js_sdk: '//cdn.jsdelivr.net/npm/leancloud-storage@3.13.2/dist/av-min.js',
+        chart: 'https://cdn.bootcss.com/Chart.js/2.7.2/Chart.bundle.min.js',
+        gitalk: {
+          js: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.js',
+          css: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.css'
+        },
+        valine: 'https://unpkg.com/valine/dist/Valine.min.js',
+        mathjax: 'https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML',
+        mermaid: 'https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js'
+      },
+      site: {
+        toc: {
+          selectors: 'h1,h2,h3'
+        }
+      },
+      paths: {
+        search_js: '/assets/search.js'
+      }
+    };
+    window.TEXT_VARIABLES = TEXT_VARIABLES;
+  })();
+</script>
+</head>
+  <body>
+    <div class="root" data-is-touch="false">
+      <div class="layout--page js-page-root"><div class="page__main js-page-main page__viewport has-aside cell cell--auto">
+
+      <div class="page__main-inner"><div class="page__header d-print-none"><header class="header"><div class="main">
+      <div class="header__title">
+        <div class="header__brand"><svg version="1.0" width="2848.000000pt" height="2848.000000pt" viewBox="0 0 2848.000000 2848.000000" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <defs></defs>
+  <g transform="translate(0.000000,2848.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
+    <path d="M10593 18855 c-7 -8 -13 -19 -13 -25 0 -5 -4 -10 -10 -10 -5 0 -10
+-6 -10 -14 0 -8 -3 -16 -7 -18 -5 -1 -42 -55 -83 -118 -41 -63 -77 -117 -80
+-120 -13 -13 -181 -269 -201 -307 -7 -13 -16 -23 -21 -23 -4 0 -8 -7 -8 -15 0
+-8 -4 -15 -10 -15 -5 0 -10 -6 -10 -13 0 -8 -9 -22 -20 -32 -11 -10 -20 -24
+-20 -32 0 -7 -4 -13 -9 -13 -5 0 -13 -9 -16 -20 -3 -11 -12 -26 -18 -32 -12
+-13 -68 -95 -77 -113 -13 -26 -246 -370 -252 -373 -5 -2 -8 -10 -8 -18 0 -8
+-4 -14 -10 -14 -5 0 -10 -7 -10 -15 0 -8 -3 -15 -8 -15 -4 0 -12 -9 -17 -19
+-12 -23 -225 -347 -240 -364 -6 -7 -42 -60 -80 -119 -39 -59 -75 -108 -81
+-108 -6 0 -29 8 -50 17 -22 9 -48 18 -58 20 -11 2 -24 7 -30 12 -9 7 -171 74
+-186 77 -3 0 -14 5 -25 9 -49 21 -811 327 -820 329 -5 2 -19 7 -30 11 -123 52
+-267 109 -295 118 -19 6 -37 14 -40 17 -3 3 -9 6 -15 7 -5 1 -32 10 -58 20
+-45 17 -49 17 -58 1 -5 -9 -16 -24 -24 -32 -8 -8 -15 -18 -15 -23 0 -4 -14
+-23 -31 -40 -16 -18 -26 -33 -22 -33 4 0 3 -4 -2 -8 -10 -7 -69 -81 -110 -138
+-20 -28 -98 -131 -112 -149 -5 -5 -19 -26 -33 -45 -13 -19 -27 -37 -30 -40 -3
+-3 -43 -57 -90 -120 -47 -63 -92 -120 -100 -127 -8 -7 -10 -13 -5 -13 6 0 6
+-3 0 -8 -6 -4 -29 -32 -53 -62 -23 -30 -45 -59 -50 -65 -4 -5 -18 -26 -32 -45
+-13 -19 -27 -37 -30 -40 -3 -3 -25 -32 -50 -65 -24 -33 -48 -64 -52 -70 -5 -5
+-47 -62 -94 -125 -80 -109 -102 -138 -139 -185 -8 -11 -65 -87 -127 -170 -62
+-82 -116 -154 -120 -160 -5 -5 -38 -49 -73 -97 -35 -48 -70 -95 -79 -104 -9
+-8 -16 -19 -16 -24 0 -5 -7 -16 -15 -24 -9 -8 -43 -53 -77 -98 -34 -46 -65
+-84 -70 -86 -4 -2 -8 -8 -8 -13 0 -10 -5 -17 -45 -63 -14 -16 -25 -32 -25 -35
+0 -3 -11 -19 -25 -34 -14 -15 -23 -27 -20 -27 2 0 -4 -10 -14 -22 -17 -20
+-159 -207 -216 -284 -11 -15 -25 -32 -30 -38 -6 -6 -28 -37 -49 -68 -22 -32
+-43 -58 -47 -58 -4 0 -10 -8 -14 -19 -3 -10 -16 -30 -28 -43 -12 -13 -31 -37
+-41 -53 -10 -17 -25 -37 -33 -45 -8 -8 -35 -44 -61 -80 -25 -36 -49 -67 -52
+-70 -3 -3 -37 -48 -75 -100 -38 -52 -72 -97 -75 -100 -3 -3 -44 -57 -90 -120
+-91 -123 -107 -144 -128 -166 -7 -8 -11 -14 -8 -14 3 0 -3 -10 -13 -22 -20
+-23 -183 -238 -211 -278 -8 -12 -23 -31 -32 -43 -10 -12 -56 -74 -103 -137
+-87 -118 -113 -152 -130 -173 -6 -6 -35 -46 -65 -87 -59 -80 -78 -105 -98
+-125 -6 -8 -12 -16 -12 -19 0 -5 -87 -123 -100 -136 -3 -3 -97 -129 -210 -280
+-113 -151 -213 -284 -222 -294 -10 -11 -18 -24 -18 -29 0 -7 -51 -3 -90 8 -8
+2 -31 6 -50 9 -19 3 -46 8 -60 11 -24 5 -38 8 -120 22 -19 3 -44 8 -55 10 -11
+2 -33 6 -50 9 -16 3 -88 16 -160 30 -126 24 -175 33 -219 38 -11 2 -28 6 -36
+9 -8 3 -37 9 -65 13 -27 4 -57 9 -65 11 -21 4 -58 11 -105 19 -22 3 -42 8 -44
+10 -2 2 -13 -6 -23 -19 -11 -12 -32 -36 -46 -52 -15 -17 -56 -63 -92 -104 -36
+-41 -76 -87 -90 -101 -14 -15 -50 -56 -80 -91 -30 -35 -69 -79 -87 -99 -18
+-19 -43 -47 -55 -61 -13 -15 -50 -57 -84 -95 -77 -87 -141 -160 -224 -254 -36
+-41 -76 -85 -88 -99 -13 -13 -37 -42 -53 -64 -16 -22 -29 -37 -29 -33 0 4 -12
+-7 -27 -26 -16 -18 -32 -38 -38 -44 -5 -6 -35 -39 -65 -74 -30 -34 -68 -77
+-85 -95 -16 -18 -43 -49 -60 -69 -16 -20 -46 -53 -65 -74 -19 -21 -62 -69 -95
+-106 -33 -38 -73 -84 -90 -102 -16 -17 -49 -54 -72 -80 -22 -27 -55 -65 -73
+-84 -18 -19 -51 -57 -73 -83 -50 -58 -63 -73 -144 -163 -34 -38 -70 -78 -80
+-90 -51 -60 -142 -162 -170 -190 -18 -18 -33 -35 -33 -39 0 -3 -10 -16 -22
+-29 -20 -20 -101 -110 -155 -173 -10 -11 -47 -53 -83 -93 -36 -40 -69 -78 -75
+-85 -5 -6 -25 -28 -44 -48 l-34 -36 69 4 c38 3 114 7 169 10 55 2 132 7 170
+10 39 3 104 7 147 9 42 2 81 6 86 10 6 3 13 2 17 -4 4 -6 12 -7 18 -3 7 4 32
+8 57 9 25 1 88 5 140 8 52 4 133 9 180 11 47 3 114 7 150 10 36 3 106 7 155 9
+50 2 126 7 170 10 174 13 340 23 477 30 36 2 71 7 77 10 6 4 11 2 11 -4 0 -6
+5 -8 11 -4 12 7 59 11 201 18 47 2 91 7 97 10 6 4 11 2 11 -4 0 -6 5 -8 13 -3
+6 4 41 8 77 10 36 1 94 4 130 7 36 3 112 8 170 11 58 3 128 7 155 9 28 3 97 7
+155 11 58 3 139 8 180 11 41 2 113 6 160 9 47 2 85 5 85 5 0 2 186 13 242 14
+29 0 53 5 53 9 0 4 8 3 19 -2 10 -6 21 -7 25 -3 4 3 28 8 54 9 57 2 194 10
+317 18 50 3 119 7 155 9 36 2 108 7 160 11 52 3 127 8 165 10 39 3 115 7 170
+11 55 3 127 7 160 9 33 2 60 4 60 5 0 1 12 3 28 4 15 1 27 -3 27 -9 0 -7 3 -7
+8 0 4 6 19 11 35 12 92 3 82 -6 86 81 1 42 4 97 6 122 10 124 16 188 21 215 3
+17 7 44 9 60 4 30 14 94 21 130 2 10 6 37 9 60 3 22 8 48 11 57 6 20 13 52 20
+97 5 32 9 49 18 89 42 180 59 250 76 312 12 41 23 86 26 100 3 14 11 45 19 70
+41 135 59 197 62 211 1 9 8 29 14 45 7 16 12 32 11 35 -1 4 13 46 29 95 17 49
+32 99 33 111 2 13 9 29 16 38 7 8 10 15 7 15 -3 0 15 57 40 128 25 70 46 132
+47 137 2 6 6 19 10 30 5 11 12 34 18 50 5 17 14 39 18 50 18 46 35 91 36 98 1
+4 3 9 4 12 1 3 3 8 5 13 1 4 5 14 8 22 4 8 19 49 35 90 l28 75 649 2 c358 2
+731 3 830 3 l180 0 78 158 c42 87 77 163 77 170 0 7 5 12 12 12 6 0 9 3 5 6
+-3 4 4 25 15 48 12 22 23 43 23 46 1 6 30 68 98 210 27 58 50 110 52 115 1 6
+16 42 34 80 19 39 45 95 58 125 14 30 44 96 67 145 23 50 43 93 44 97 1 5 16
+38 33 75 43 93 72 157 74 163 3 8 45 99 101 219 30 62 54 120 54 127 0 8 5 14
+10 14 6 0 10 5 10 11 0 6 23 58 50 115 28 57 50 108 50 114 0 5 4 10 10 10 5
+0 9 3 8 8 -2 11 10 38 127 277 59 121 112 223 117 226 5 3 9 9 8 13 -4 13 22
+66 32 66 5 0 7 4 3 9 -3 5 3 17 12 27 10 10 17 19 16 21 -3 4 30 76 38 83 3 3
+19 32 36 65 59 116 78 150 91 163 6 7 12 20 12 28 0 8 5 14 10 14 6 0 10 5 10
+10 0 13 132 234 142 238 4 2 8 7 8 12 0 12 71 118 150 225 36 50 74 101 83
+115 9 13 17 21 17 16 0 -4 17 14 39 41 101 126 258 236 358 250 36 5 44 10 50
+32 3 14 10 32 16 39 5 6 7 12 4 12 -3 0 2 24 13 54 10 30 16 57 13 60 -4 3 0
+6 7 6 7 0 11 3 7 6 -3 4 0 19 9 35 8 16 11 29 7 29 -4 0 -2 5 5 12 7 7 12 21
+12 32 0 12 7 30 15 40 8 11 15 26 15 33 0 7 11 35 24 62 13 27 27 62 30 77 4
+15 16 40 27 55 10 15 19 32 19 38 0 12 71 152 81 161 4 3 15 21 26 40 31 58
+75 125 84 128 5 2 9 10 9 18 0 8 7 17 15 20 8 4 15 10 15 14 0 24 148 171 220
+219 54 37 141 81 170 86 8 2 15 4 15 5 0 11 185 17 230 7 17 -4 46 -10 65 -13
+19 -3 38 -8 42 -11 5 -2 16 -6 27 -8 34 -6 307 -101 325 -113 6 -3 16 -7 21
+-8 6 -1 33 -12 60 -24 28 -12 68 -30 90 -40 103 -45 122 -53 149 -66 16 -8 35
+-14 43 -14 7 0 13 -4 13 -10 0 -5 4 -10 10 -10 20 0 542 -256 780 -382 47 -25
+128 -67 180 -94 52 -27 97 -51 100 -54 3 -3 28 -17 55 -32 82 -42 208 -110
+240 -129 17 -10 46 -26 65 -36 19 -9 62 -33 95 -52 33 -19 61 -33 61 -30 1 2
+10 -3 20 -11 11 -8 28 -20 39 -26 11 -6 43 -24 70 -39 28 -16 70 -39 95 -53
+24 -13 57 -33 72 -44 15 -10 28 -16 28 -11 0 4 4 4 8 -2 4 -5 16 -15 27 -21
+29 -16 104 -58 150 -84 22 -13 60 -34 84 -48 25 -14 68 -38 95 -55 28 -16 71
+-41 96 -55 25 -13 52 -31 61 -38 8 -8 19 -14 23 -14 4 0 84 -45 177 -100 93
+-55 174 -100 179 -100 6 0 10 -4 10 -9 0 -5 8 -11 18 -15 9 -3 24 -10 32 -16
+14 -9 186 -111 255 -150 71 -41 110 -64 115 -70 3 -3 25 -16 50 -29 25 -13 52
+-29 60 -36 8 -7 22 -15 30 -19 8 -4 24 -12 35 -19 11 -7 88 -52 170 -102 83
+-49 152 -93 153 -97 2 -5 8 -8 13 -8 12 0 262 -152 271 -165 4 -5 8 -6 8 -2 0
+4 6 3 13 -3 6 -6 82 -53 167 -105 85 -52 164 -101 175 -110 10 -8 23 -15 28
+-15 4 0 35 -18 67 -40 32 -22 64 -40 69 -40 6 0 11 -4 11 -10 0 -5 5 -10 11
+-10 6 0 25 -11 43 -25 18 -14 38 -25 44 -25 6 0 16 -9 22 -20 6 -11 7 -20 2
+-20 -6 0 -12 -8 -15 -17 -4 -10 -26 -45 -50 -78 -24 -33 -79 -112 -122 -175
+-75 -111 -104 -152 -125 -177 -5 -7 -10 -17 -10 -23 0 -5 -3 -10 -8 -10 -4 0
+-12 -9 -17 -20 -13 -26 -176 -264 -186 -270 -4 -3 -15 -19 -25 -37 -11 -17
+-37 -57 -59 -90 -22 -32 -81 -116 -130 -188 -49 -71 -93 -131 -97 -133 -4 -2
+-8 -8 -8 -13 0 -5 -12 -27 -27 -48 -16 -21 -35 -49 -43 -61 -8 -12 -30 -43
+-48 -69 -32 -45 -300 -436 -384 -559 -24 -35 -54 -77 -66 -93 -13 -16 -20 -29
+-15 -29 4 0 3 -4 -4 -8 -11 -7 -61 -78 -149 -212 -20 -30 -41 -56 -45 -58 -5
+-2 -9 -9 -9 -16 0 -7 -9 -21 -20 -31 -11 -10 -20 -24 -20 -31 0 -7 -3 -14 -8
+-16 -4 -2 -25 -30 -47 -63 -21 -33 -41 -62 -44 -65 -3 -3 -30 -41 -60 -85 -73
+-107 -168 -246 -222 -323 -24 -35 -48 -71 -54 -80 -5 -9 -12 -19 -15 -22 -3
+-3 -14 -18 -26 -35 -60 -87 -151 -220 -164 -240 -24 -35 -81 -119 -182 -265
+-51 -75 -124 -182 -163 -239 -38 -57 -75 -109 -82 -116 -7 -7 -9 -15 -6 -19 4
+-3 2 -6 -4 -6 -5 0 -25 -24 -43 -52 -19 -29 -38 -54 -42 -56 -4 -2 -8 -8 -8
+-13 0 -9 -38 -68 -51 -79 -3 -3 -18 -23 -32 -45 -14 -22 -52 -78 -84 -125 -32
+-47 -87 -128 -123 -180 -35 -52 -67 -97 -70 -100 -9 -8 -84 -119 -95 -141 -5
+-10 -13 -19 -17 -19 -5 0 -8 -7 -8 -15 0 -8 -4 -15 -9 -15 -5 0 -12 -8 -15
+-18 -4 -10 -14 -27 -24 -38 -9 -11 -23 -29 -30 -40 -42 -64 -53 -81 -67 -100
+-43 -58 -143 -209 -140 -212 3 -3 276 129 285 138 3 3 10 6 17 7 7 2 58 25
+115 52 130 62 189 89 308 141 52 23 101 46 108 52 6 6 12 8 12 5 0 -3 50 16
+110 43 61 26 110 46 110 43 0 -2 12 5 26 16 14 11 32 17 40 14 8 -3 14 1 14 8
+0 7 3 10 6 7 3 -4 24 2 47 12 68 29 117 49 120 48 1 -1 13 5 27 12 14 8 30 15
+35 16 6 1 55 21 110 43 55 22 103 41 106 41 4 0 24 8 45 17 22 9 48 18 58 20
+11 2 24 7 30 12 9 7 82 34 96 36 5 0 60 21 95 35 23 10 225 81 240 84 6 2 17
+6 25 9 8 3 87 29 175 57 88 29 185 60 216 70 31 11 68 21 83 24 14 2 31 8 38
+13 7 4 18 8 23 9 12 2 127 34 247 68 47 13 89 22 92 18 3 -3 6 0 6 7 0 7 4 9
+10 6 5 -3 18 -2 27 4 10 5 32 11 48 14 17 3 37 8 45 11 8 3 26 8 40 10 14 3
+63 14 110 26 47 12 137 32 200 46 63 14 138 35 165 48 48 22 125 87 125 106 0
+5 6 15 13 22 11 10 47 101 52 128 1 3 5 23 9 45 16 80 17 104 20 318 2 120 -1
+220 -6 223 -4 3 -6 10 -3 15 4 5 8 82 10 172 2 89 6 173 9 187 19 105 30 144
+61 207 34 69 111 153 140 153 7 0 18 6 24 14 10 12 88 32 164 42 41 5 100 14
+124 18 11 3 36 7 54 10 19 3 44 8 55 10 12 2 37 7 56 10 19 3 72 14 119 25 47
+11 98 23 114 26 41 8 60 13 60 15 0 1 9 3 20 5 11 2 31 6 45 10 14 3 36 8 50
+11 14 2 36 7 50 11 14 3 30 7 35 9 6 1 46 11 91 23 45 11 92 23 105 25 13 3
+25 5 27 7 2 2 1 1 57 14 22 5 42 9 45 10 17 5 59 16 85 20 17 4 35 7 40 9 16
+4 89 19 105 21 8 1 26 5 40 9 14 3 41 8 60 10 19 3 35 5 35 6 0 1 36 4 80 6
+75 5 82 7 113 39 17 18 32 37 32 42 0 4 7 21 15 36 8 15 31 78 51 140 33 104
+43 137 49 177 1 8 5 22 8 30 13 36 66 269 72 315 1 11 5 27 8 35 6 16 62 291
+83 410 4 19 9 44 11 55 7 36 12 59 17 85 2 14 7 36 10 50 3 14 8 36 10 50 3
+14 7 35 10 46 2 12 7 39 10 60 4 22 8 46 11 54 2 8 6 26 9 40 15 88 17 100 51
+260 14 69 28 134 30 145 3 11 7 31 10 45 3 14 7 39 9 57 3 18 7 36 9 40 3 4 8
+25 11 46 7 45 25 125 33 147 3 8 7 29 9 45 3 17 11 53 18 80 8 28 20 77 26
+110 7 33 16 65 21 71 5 6 7 13 4 16 -3 2 9 54 26 114 17 60 32 116 34 124 20
+88 111 357 127 378 6 6 7 12 3 12 -4 0 0 11 9 25 9 14 14 25 11 25 -3 0 13 35
+36 78 23 42 48 88 55 102 20 38 88 110 120 127 42 22 94 23 135 2 42 -21 42
+-21 124 -114 113 -128 283 -311 393 -424 124 -129 362 -369 362 -367 0 1 58
+-55 129 -124 71 -69 177 -170 236 -225 114 -107 124 -116 231 -213 38 -35 87
+-80 109 -100 22 -20 76 -68 120 -107 44 -38 91 -81 105 -95 14 -14 39 -35 55
+-48 17 -13 46 -38 65 -55 19 -18 69 -61 110 -97 41 -36 80 -70 86 -76 6 -5 31
+-26 54 -45 23 -18 52 -43 64 -55 11 -11 46 -40 76 -65 30 -24 69 -57 86 -74
+18 -16 44 -39 58 -49 15 -11 37 -29 50 -40 21 -19 89 -76 140 -118 51 -41 171
+-143 176 -148 3 -4 14 -13 26 -21 28 -19 113 -89 141 -116 13 -12 23 -19 23
+-15 0 4 4 2 8 -3 4 -6 32 -30 62 -55 30 -25 58 -49 62 -55 4 -5 8 -6 8 -2 0 4
+18 -10 41 -33 22 -22 44 -40 47 -40 4 0 30 -20 57 -45 28 -24 53 -45 56 -45 3
+0 17 -10 31 -22 13 -13 37 -32 52 -43 15 -11 41 -31 56 -45 15 -14 40 -34 55
+-44 14 -11 34 -27 44 -35 10 -9 33 -27 51 -41 55 -42 95 -74 102 -85 4 -5 8
+-7 8 -3 0 4 11 -3 24 -15 26 -24 38 -33 161 -129 44 -35 82 -65 85 -68 3 -3
+43 -34 90 -70 99 -76 98 -75 172 -134 32 -25 62 -46 67 -46 5 0 11 -4 13 -8 3
+-7 61 -54 192 -155 16 -12 43 -34 61 -49 18 -16 37 -28 43 -28 6 0 12 -4 14
+-9 2 -4 41 -37 88 -71 47 -35 87 -66 90 -70 3 -3 50 -39 105 -80 114 -86 126
+-95 170 -132 18 -16 37 -28 43 -28 6 0 12 -4 14 -8 2 -4 68 -57 148 -117 80
+-61 147 -112 150 -115 3 -3 68 -52 145 -110 77 -57 142 -107 145 -110 3 -3 79
+-61 170 -129 91 -68 179 -135 195 -148 17 -13 35 -27 40 -31 11 -8 215 -162
+230 -174 6 -4 35 -27 65 -51 30 -23 80 -61 110 -84 30 -22 66 -50 79 -62 13
+-11 27 -21 30 -21 3 0 18 -10 31 -22 14 -13 82 -66 150 -118 69 -52 132 -100
+140 -107 44 -35 141 -111 170 -133 65 -49 165 -128 246 -195 13 -11 36 -29 50
+-40 14 -11 38 -30 52 -42 15 -12 86 -70 157 -128 72 -59 144 -119 161 -134 17
+-15 55 -47 84 -72 28 -24 62 -53 74 -64 12 -11 58 -51 101 -90 43 -38 106 -97
+140 -130 93 -91 103 -96 49 -24 -27 37 -55 75 -62 85 -29 44 -112 160 -122
+171 -5 7 -10 16 -10 22 0 5 -4 11 -8 13 -4 2 -28 32 -52 68 -64 93 -207 293
+-219 307 -6 7 -11 17 -11 22 0 6 -6 14 -14 18 -7 4 -18 18 -25 30 -11 22 -110
+163 -136 195 -7 9 -22 29 -32 45 -17 27 -95 138 -111 158 -4 6 -23 33 -42 60
+-19 28 -37 52 -42 53 -4 2 -8 8 -8 14 0 8 -44 73 -60 88 -3 3 -26 35 -50 72
+-25 38 -49 68 -53 68 -5 0 -5 5 -2 10 3 6 1 10 -4 10 -6 0 -11 5 -11 10 0 6
+-11 23 -24 38 -14 15 -25 31 -25 36 1 5 -3 12 -8 15 -8 5 -58 74 -155 213 -18
+26 -37 47 -41 48 -5 0 -5 5 -2 10 3 6 -1 13 -9 16 -9 3 -16 11 -16 18 0 6 -18
+34 -40 61 -22 28 -40 55 -40 62 0 6 -4 13 -9 15 -8 3 -145 190 -167 228 -12
+22 -42 64 -66 92 -10 12 -18 25 -18 30 0 4 -8 16 -17 27 -10 10 -34 42 -53 71
+-19 29 -43 60 -52 71 -9 10 -24 32 -33 48 -8 17 -20 31 -25 31 -6 0 -10 4 -10
+10 0 5 -21 40 -47 77 -67 96 -280 396 -290 408 -4 6 -33 46 -63 90 -30 44 -58
+81 -62 83 -4 2 -8 10 -8 17 0 7 -4 15 -8 17 -5 2 -36 44 -71 93 -63 91 -85
+123 -291 414 -63 89 -119 170 -125 179 -5 9 -12 19 -15 22 -3 3 -17 21 -30 40
+-13 19 -27 37 -30 40 -8 8 -70 100 -70 105 0 3 -12 19 -27 36 -16 17 -26 32
+-23 32 2 1 -3 11 -13 22 -14 18 -75 102 -137 190 -11 17 -38 53 -58 82 -20 28
+-43 59 -50 70 -7 10 -48 69 -92 131 -44 62 -80 117 -80 122 0 6 -4 10 -8 10
+-5 0 -27 28 -50 63 -24 34 -68 98 -99 142 -31 44 -68 96 -82 116 -14 20 -63
+89 -108 153 -46 63 -83 120 -83 126 0 25 -7 16 -223 -274 -12 -16 -34 -45 -50
+-65 -15 -20 -36 -47 -46 -61 -10 -14 -49 -66 -87 -117 -38 -50 -78 -104 -89
+-119 -11 -16 -28 -36 -37 -46 -10 -10 -18 -20 -18 -23 0 -4 -210 -287 -238
+-320 -4 -5 -19 -26 -32 -45 -14 -19 -27 -37 -30 -40 -3 -3 -39 -49 -79 -102
+-40 -54 -76 -98 -80 -98 -3 0 -19 23 -36 50 -16 27 -33 50 -37 50 -5 0 -8 5
+-8 10 0 10 -38 69 -51 80 -5 4 -38 53 -74 109 -5 8 -15 21 -22 28 -7 7 -22 31
+-34 53 -13 22 -26 40 -31 40 -4 0 -8 6 -8 14 0 8 -4 16 -8 18 -5 2 -50 64
+-100 138 -51 73 -101 144 -112 157 -11 13 -17 23 -14 23 6 0 -48 74 -58 78 -5
+2 -8 10 -8 17 0 8 -6 20 -13 27 -7 7 -44 58 -82 113 -38 55 -73 102 -77 103
+-4 2 -8 10 -8 18 0 8 -4 14 -10 14 -5 0 -10 7 -10 15 0 8 -4 15 -10 15 -5 0
+-10 5 -10 11 0 6 -6 16 -12 24 -15 15 -124 173 -151 217 -9 16 -25 38 -35 49
+-11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 6 0 6 3 0 8 -17
+11 -175 239 -175 251 0 6 -3 11 -8 11 -4 0 -22 21 -39 48 -30 44 -139 202
+-270 390 -32 46 -62 91 -68 100 -10 16 -20 29 -42 56 -7 8 -13 19 -13 23 0 4
+-12 21 -26 38 -14 16 -35 45 -47 65 -12 19 -27 41 -34 48 -7 7 -13 20 -13 28
+0 8 -4 14 -8 14 -4 0 -32 36 -61 80 -30 44 -58 80 -64 80 -6 0 -8 3 -4 6 6 6
+-81 136 -95 142 -5 2 -8 8 -8 12 0 11 -162 244 -172 248 -5 2 -8 8 -8 13 0 9
+-37 67 -51 79 -3 3 -34 48 -70 100 -35 52 -67 97 -71 98 -5 2 -8 8 -8 13 0 6
+-8 19 -18 30 -11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 7 0
+7 3 0 8 -15 11 -115 151 -115 161 0 5 -3 11 -7 13 -5 2 -33 39 -63 83 -30 44
+-58 85 -62 90 -26 32 -88 127 -88 135 0 6 -3 10 -7 10 -5 0 -30 34 -57 74
+l-49 74 -26 -16 c-26 -15 -72 -45 -259 -166 -56 -36 -107 -66 -112 -66 -4 0
+-10 -4 -12 -8 -1 -4 -32 -26 -68 -47 -36 -21 -66 -43 -68 -47 -2 -4 -9 -8 -16
+-8 -6 0 -21 -7 -31 -15 -35 -27 -158 -105 -166 -105 -4 0 -14 -6 -21 -12 -22
+-21 -127 -88 -138 -88 -5 0 -10 -4 -10 -9 0 -5 -13 -14 -30 -21 -16 -7 -30
+-16 -30 -21 0 -5 -6 -9 -14 -9 -8 0 -21 -6 -28 -13 -7 -7 -38 -28 -68 -47 -30
+-19 -58 -39 -62 -45 -4 -5 -8 -6 -8 -2 0 4 -15 -3 -33 -17 -19 -15 -39 -26
+-45 -26 -7 0 -12 -4 -12 -8 0 -5 -18 -17 -40 -28 -22 -10 -40 -22 -40 -26 0
+-5 -7 -8 -15 -8 -8 0 -15 -4 -15 -9 0 -5 -16 -17 -36 -27 -20 -11 -44 -23 -55
+-29 -10 -5 -19 -13 -19 -17 0 -5 -7 -8 -15 -8 -8 0 -15 -4 -15 -10 0 -5 -4
+-10 -10 -10 -5 0 -39 -19 -74 -42 -89 -59 -417 -268 -481 -308 -14 -8 -113
+-71 -220 -140 -107 -69 -205 -130 -218 -137 -12 -7 -29 -17 -37 -23 -8 -6 -51
+-33 -95 -62 -44 -28 -92 -59 -107 -69 -15 -11 -32 -19 -38 -19 -5 0 -10 -5
+-10 -10 0 -6 -12 -15 -26 -20 -14 -6 -47 -25 -72 -43 -51 -34 -78 -52 -102
+-64 -8 -4 -19 -11 -25 -15 -5 -5 -39 -27 -75 -50 -36 -23 -94 -60 -130 -83
+-36 -23 -108 -68 -160 -100 -52 -32 -97 -62 -100 -65 -3 -4 -30 -22 -60 -39
+-30 -17 -64 -38 -76 -46 -18 -14 -24 -12 -65 17 -24 18 -45 36 -47 40 -2 5 -8
+8 -13 8 -5 0 -33 18 -62 40 -65 50 -55 43 -162 120 -49 35 -94 68 -100 72 -9
+8 -90 67 -140 102 -92 66 -151 111 -153 118 -2 4 -8 8 -13 8 -8 0 -111 72
+-129 90 -3 3 -12 10 -22 15 -22 14 -302 217 -308 225 -3 3 -18 14 -35 24 -16
+11 -34 23 -40 28 -61 49 -116 88 -124 88 -5 0 -11 4 -13 8 -1 4 -59 48 -128
+97 -69 49 -127 92 -130 95 -3 4 -26 21 -52 38 -25 18 -54 39 -62 48 -9 8 -16
+12 -16 7 0 -4 -4 -3 -8 3 -4 6 -50 42 -102 79 -52 38 -99 72 -105 77 -5 4 -46
+34 -90 65 -44 32 -81 61 -83 65 -2 4 -8 8 -14 8 -6 0 -24 11 -42 25 -45 36
+-43 35 -133 100 -46 32 -83 62 -83 67 0 4 -5 8 -11 8 -9 0 -82 49 -124 83 -5
+4 -41 30 -80 58 -38 27 -77 55 -85 62 -8 7 -56 41 -105 77 -50 35 -99 72 -109
+82 -11 10 -25 18 -32 18 -7 0 -14 4 -16 8 -3 7 -529 394 -566 417 -9 6 -19 13
+-22 16 -24 28 -44 25 -108 -19 -37 -24 -70 -49 -73 -54 -3 -5 -8 -9 -10 -7 -4
+3 -90 -51 -99 -62 -3 -3 -10 -8 -15 -10 -19 -8 -460 -304 -463 -311 -2 -5 -7
+-8 -12 -8 -9 0 -222 -140 -230 -152 -8 -10 -54 -1 -58 12 -2 5 -7 10 -12 10
+-5 0 -46 23 -92 51 -46 29 -96 59 -113 69 -16 10 -66 40 -110 67 -44 27 -87
+52 -95 56 -8 4 -28 16 -45 27 -16 11 -37 23 -45 27 -28 15 -115 67 -120 73 -3
+3 -16 11 -30 18 -36 17 -64 35 -72 47 -4 6 -8 6 -8 2 0 -4 -15 2 -32 15 -46
+32 -67 45 -115 69 -24 12 -43 25 -43 30 0 5 -5 9 -10 9 -6 0 -35 15 -65 34
+-29 19 -55 33 -57 30 -3 -2 -13 5 -23 16 -10 11 -21 20 -25 20 -4 0 -67 36
+-139 80 -73 44 -136 80 -142 80 -5 0 -9 4 -9 9 0 5 -8 11 -17 15 -10 3 -38 19
+-63 34 -116 73 -134 81 -147 67z"></path>
+  </g>
+</svg><a title="宋志刚(Sidgwick)的个人博客, 主要是一些技术记录和分享. 不写博客的技术人员不 是好的技术人员. 工作之余写点小博客, 记录学习中遇到的点点滴滴, 方便自己以后 查看, 也方便和我遇到一样问题的人.
+" href="/">挚爱荒原</a></div><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></div><nav class="navigation">
+        <ul><li class="navigation__item"><a href="/archive.html">归档</a></li><li class="navigation__item"><a href="/about.html">关于</a></li><li><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></li></ul>
+      </nav></div>
+  </header>
+</div><div class="page__content"><div class ="main"><div class="grid grid--reverse">
+
+              <div class="col-aside d-print-none js-col-aside"><aside class="page__aside js-page-aside"><div class="toc-aside js-toc-root"></div>
+</aside></div>
+
+              <div class="col-main cell cell--auto"><!-- start custom main top snippet -->
+
+<!-- end custom main top snippet -->
+<article itemscope itemtype="http://schema.org/Article"><div class="article__header"><header><h1>Backtrader 学习系列 - QuickStart</h1></header><span class="split-space">&nbsp;</span>
+          <a class="edit-on-github"
+            title="在 Github 上修改"
+            href="https://github.com/sidgwick/sidgwick.github.io/tree/master/_posts/quant/backtrader/2022-07-08-backtrader-quick-start.md">
+            <i class="far fa-edit"></i></a></div><meta itemprop="headline" content="Backtrader 学习系列 - QuickStart"><div class="article__info clearfix"><ul class="left-col menu"><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=backtrader">backtrader</a>
+            </li><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=quant">quant</a>
+            </li></ul><ul class="right-col menu"><li><i class="far fa-calendar-alt"></i> <span>2022年 07月09日</span>
+            </li></ul></div><meta itemprop="author" content="Zhigang Song"/><meta itemprop="datePublished" content="2022-07-09T05:34:04+08:00">
+    <meta itemprop="keywords" content="backtrader,quant"><div class="js-article-content"><div class="layout--article"><!-- start custom article top snippet -->
+
+<!-- end custom article top snippet -->
+<div class="article__content" itemprop="articleBody"><blockquote>
+  <p>参考原文: <a href="https://www.backtrader.com/docu/quickstart/quickstart">https://www.backtrader.com/docu/quickstart/quickstart</a></p>
+
+  <p>IMPORTANT: The data files used in the quickstart guide are updated from time to time, which means that the adjusted close changes and with it the close (and the other components). That means that the actual output may be different to what was put in the documentation at the time of writing.</p>
+</blockquote>
+
+<h2 id="平台使用">平台使用</h2>
+
+<p>首先粗略地解释使用 <strong>backtrader</strong> 时的 2 个基本概念, 然后来看一系列从空跑直到几乎完整的策略的例子.</p>
+
+<ol>
+  <li>
+    <p>Lines</p>
+
+    <p>Data Feeds, Indicators 以及 Strategy 拥有 <em>lines</em>. 所谓的 <code class="language-plaintext highlighter-rouge">line</code> 就是一些列的点组成的线, 通常 Data Feed 有以下几条 line: Open, High, Low, Close, Volume, OpenInterest. 举例来说 Open 点随时间移动可以组成一条 <code class="language-plaintext highlighter-rouge">line</code>, 其他几个指标也是如此. 因此一个 Data Feed 通常有 6 条 line. 考虑 DateTime 的话(DateTime 是 backtrader DataFeed 的索引), 那就有 7 条 line.</p>
+  </li>
+  <li>
+    <p>索引 0</p>
+
+    <p>当访问 line 上面的数据时, 当前值得索引是 <code class="language-plaintext highlighter-rouge">0</code>, 访问上一个值使用索引 <code class="language-plaintext highlighter-rouge">-1</code>. Python 语言中 <code class="language-plaintext highlighter-rouge">-1</code> 一般用来表示一个可迭代对象的最后一个值, 我们这里用 <code class="language-plaintext highlighter-rouge">-1</code> 来表示最后一个 <strong>output</strong> 值(这里的 <code class="language-plaintext highlighter-rouge">output</code> 应该就是已经处理过的数据列表)</p>
+  </li>
+</ol>
+
+<p>现在想像一下我们在策略初始化的时候创建一条移动平均线(Simple Moving Average):</p>
+
+<!--more-->
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">self</span><span class="p">.</span><span class="n">sma</span> <span class="o">=</span> <span class="nc">SimpleMovingAverage</span><span class="p">(.....)</span>
+</code></pre></div></div>
+
+<p>访问当前值的最简单方式是:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">av</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">sma</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</code></pre></div></div>
+
+<p>因为 0 可以唯一表示当前正在处理的数据, 因此无需知道当前已经处理了多少 bar/minute/day/month.</p>
+
+<p>遵从 <strong>pythonic</strong> 传统, 最后一个输出值可以通过 <code class="language-plaintext highlighter-rouge">-1</code> 获得:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">previous_value</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">sma</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</code></pre></div></div>
+
+<p>当然更早的数据可以通过 -2, -3….来获取.</p>
+
+<h2 id="实例-从-0-到-100">实例: 从 0 到 100</h2>
+
+<h3 id="基本设置">基本设置</h3>
+
+<p>简单跑一下下面的代码:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="n">__future__</span> <span class="kn">import</span> <span class="p">(</span><span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="n">backtrader</span> <span class="k">as</span> <span class="n">bt</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="sh">'</span><span class="s">__main__</span><span class="sh">'</span><span class="p">:</span>
+    <span class="n">cerebro</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="nc">Cerebro</span><span class="p">()</span>
+
+    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Starting Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+
+    <span class="n">cerebro</span><span class="p">.</span><span class="nf">run</span><span class="p">()</span>
+
+    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Final Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+</code></pre></div></div>
+
+<p>上面的代码跑完之后, 可以得到如下结果输出:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Starting</span> <span class="n">Portfolio</span> <span class="n">Value</span><span class="p">:</span> <span class="mf">10000.00</span>
+<span class="n">Final</span> <span class="n">Portfolio</span> <span class="n">Value</span><span class="p">:</span> <span class="mf">10000.00</span>
+</code></pre></div></div>
+
+<p>在这个例子中:</p>
+
+<ul>
+  <li>引入了 backtrader 库</li>
+  <li>创建了 cerebro 引擎</li>
+  <li>cerebro 被告知执行(遍历数据)</li>
+  <li>输出了最终的结果</li>
+</ul>
+
+<p>这里指出来一些代码明面上看不到的东西:</p>
+
+<ul>
+  <li>cerebro 引擎在背地里创建了一个 broker 对象(用来表示券商).</li>
+  <li>实例在开始执行的时候有一些初始资金(10000)</li>
+</ul>
+
+<p>broker 是表示券商的对象, 如果不显式设置的话, 就会使用内置默认的券商实现.</p>
+
+<h3 id="设置现金">设置现金</h3>
+
+<p>在金融世界中只有 <em>loser</em> 才会用 1 万块入场. 让我们改一下资金额度然后重跑一下例子.</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- a/x.py
+</span><span class="gi">+++ b/x.py
+</span><span class="p">@@ -4,6 +4,7 @@</span> import backtrader as bt
+<span class="err">
+</span> if __name__ == '__main__':
+     cerebro = bt.Cerebro()
+<span class="gi">+    cerebro.broker.setcash(100000.0)
+</span><span class="err">
+</span>     print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+</code></pre></div></div>
+
+<p>上面例子执行过后, 得到如下输出:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Starting</span> <span class="n">Portfolio</span> <span class="n">Value</span><span class="p">:</span> <span class="mf">1000000.00</span>
+<span class="n">Final</span> <span class="n">Portfolio</span> <span class="n">Value</span><span class="p">:</span> <span class="mf">1000000.00</span>
+</code></pre></div></div>
+
+<p>任务完成, 让我们更进一步.</p>
+
+<h3 id="添加-data-feed">添加 Data Feed</h3>
+
+<p>我们的目的是通过自动化策略对数据的处理, 使得现金增加. 接下来我们在程序中增加一些数据:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="n">__future__</span> <span class="kn">import</span> <span class="p">(</span><span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="n">datetime</span>  <span class="c1"># For datetime objects
+</span><span class="kn">import</span> <span class="n">os.path</span>  <span class="c1"># To manage paths
+</span><span class="kn">import</span> <span class="n">sys</span>  <span class="c1"># To find out the script name (in argv[0])
+</span>
+<span class="c1"># Import the backtrader platform
+</span><span class="kn">import</span> <span class="n">backtrader</span> <span class="k">as</span> <span class="n">bt</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="sh">'</span><span class="s">__main__</span><span class="sh">'</span><span class="p">:</span>
+    <span class="c1"># Create a cerebro entity
+</span>    <span class="n">cerebro</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="nc">Cerebro</span><span class="p">()</span>
+
+    <span class="c1"># Datas are in a subfolder of the samples. Need to find where the script is
+</span>    <span class="c1"># because it could have been called from anywhere
+</span>    <span class="n">modpath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">dirname</span><span class="p">(</span><span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">abspath</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="n">datapath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="n">modpath</span><span class="p">,</span> <span class="sh">'</span><span class="s">../../datas/orcl-1995-2014.txt</span><span class="sh">'</span><span class="p">)</span>
+
+    <span class="c1"># Create a Data Feed
+</span>    <span class="n">data</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">feeds</span><span class="p">.</span><span class="nc">YahooFinanceCSVData</span><span class="p">(</span>
+        <span class="n">dataname</span><span class="o">=</span><span class="n">datapath</span><span class="p">,</span>
+        <span class="c1"># Do not pass values before this date
+</span>        <span class="n">fromdate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="c1"># Do not pass values after this date
+</span>        <span class="n">todate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">31</span><span class="p">),</span>
+        <span class="n">reverse</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="c1"># Add the Data Feed to Cerebro
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">adddata</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="c1"># Set our desired cash start
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">setcash</span><span class="p">(</span><span class="mf">100000.0</span><span class="p">)</span>
+
+    <span class="c1"># Print out the starting conditions
+</span>    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Starting Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+
+    <span class="c1"># Run over everything
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">run</span><span class="p">()</span>
+
+    <span class="c1"># Print out the final result
+</span>    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Final Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+</code></pre></div></div>
+
+<p>执行后输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 1000000.00
+Final Portfolio Value: 1000000.00
+</code></pre></div></div>
+
+<p>代码量略有增加, 因为我们添加了:</p>
+
+<ul>
+  <li>指定示例数据文件的位置</li>
+  <li>使用 datetime 对象来过滤数据</li>
+  <li>将数据添加到 cerebro</li>
+</ul>
+
+<p>因为依然没有交易策略, 上面的操作暂时不会导致输出改变.</p>
+
+<blockquote>
+  <p>Yahoo Online 以日期降序发送 CSV 数据, 这不是标准约定. <code class="language-plaintext highlighter-rouge">reversed=True</code> 参数考虑了文件中的 CSV 数据已被反转以标准的预期日期升序.</p>
+</blockquote>
+
+<h3 id="第一个策略">第一个策略</h3>
+
+<p>第一个策略我们简单地打印每天的收盘价格.</p>
+
+<p>DataSeries(Data Feed 中的基础类)对象具有别名用于访问众所周知的 OHLC 数值, 这应该可以简化我们打印逻辑.</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- x.py	2022-07-09 15:55:44.628483147 +0800
+</span><span class="gi">+++ y.py	2022-07-09 15:59:15.900063578 +0800
+</span><span class="p">@@ -7,10 +7,31 @@</span>
+ # Import the backtrader platform
+ import backtrader as bt
+<span class="err">
+</span><span class="gi">+
++# Create a Stratey
++class TestStrategy(bt.Strategy):
++
++    def log(self, txt, dt=None):
++        ''' Logging function for this strategy'''
++        dt = dt or self.datas[0].datetime.date(0)
++        print('%s, %s' % (dt.isoformat(), txt))
++
++    def __init__(self):
++        # Keep a reference to the "close" line in the data[0] dataseries
++        self.dataclose = self.datas[0].close
++
++    def next(self):
++        # Simply log the closing price of the series from the reference
++        self.log('Close, %.2f' % self.dataclose[0])
++
++
+</span> if __name__ == '__main__':
+     # Create a cerebro entity
+     cerebro = bt.Cerebro()
+<span class="err">
+</span><span class="gi">+    # Add a strategy
++    cerebro.addstrategy(TestStrategy)
++
+</span>     # Datas are in a subfolder of the samples. Need to find where the script is
+     # because it could have been called from anywhere
+     modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
+</code></pre></div></div>
+
+<p>执行之后我们可以得到以下输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 100000.00
+2000-01-03T00:00:00, Close, 27.85
+2000-01-04T00:00:00, Close, 25.39
+2000-01-05T00:00:00, Close, 24.05
+...
+...
+...
+2000-12-26T00:00:00, Close, 29.17
+2000-12-27T00:00:00, Close, 28.94
+2000-12-28T00:00:00, Close, 29.29
+2000-12-29T00:00:00, Close, 27.41
+Final Portfolio Value: 100000.00
+</code></pre></div></div>
+
+<p>解释一下:</p>
+
+<ul>
+  <li>
+    <p>在 <code class="language-plaintext highlighter-rouge">init</code> 被调用时, 策略已经拥有平台中存在的数据列表.</p>
+
+    <p>这个数据是一个标准的 Python 列表, 数据可以通过他们的插入顺序访问到. <code class="language-plaintext highlighter-rouge">self.datas[0]</code> 将会作为默认的系统时钟(The first data in the list <code class="language-plaintext highlighter-rouge">self.datas[0]</code> is the default data for trading operations and to keep all strategy elements synchronized (it’s the system clock)).</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">self.dataclose = self.datas[0].close</code> 是对 Close line 的引用. 将来在策略中可以通过它访问收盘价.</p>
+  </li>
+  <li>
+    <p>策略的 <code class="language-plaintext highlighter-rouge">next</code> 方法将会对系统时钟上的每个 <code class="language-plaintext highlighter-rouge">bar</code> 都做一次调用.</p>
+
+    <p>如果一些指标需要几个 bar 计算得出, 那么首次调用会发生在第一个能指标产出的 bar 上. 后续这块有详细介绍.</p>
+  </li>
+</ul>
+
+<h3 id="为策略添加一些逻辑">为策略添加一些逻辑</h3>
+
+<p>如果价格连续下跌 3 个交易日, 那就买买买!!!</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- y.py	2022-07-09 16:20:53.612313313 +0800
+</span><span class="gi">+++ x.py	2022-07-09 16:22:25.128408269 +0800
+</span><span class="p">@@ -24,6 +24,16 @@</span>
+         # Simply log the closing price of the series from the reference
+         self.log('Close, %.2f' % self.dataclose[0])
+<span class="err">
+</span><span class="gi">+        if self.dataclose[0] &lt; self.dataclose[-1]:
++            # current close less than previous close
++
++            if self.dataclose[-1] &lt; self.dataclose[-2]:
++                # previous close less than the previous close
++
++                # BUY, BUY, BUY!!! (with all possible default parameters)
++                self.log('BUY CREATE, %.2f' % self.dataclose[0])
++                self.buy()
++
+</span><span class="err">
+</span> if __name__ == '__main__':
+     # Create a cerebro entity
+</code></pre></div></div>
+
+<p>上面的例子执行完成之后输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 100000.00
+2000-01-03, Close, 27.85
+2000-01-04, Close, 25.39
+2000-01-05, Close, 24.05
+2000-01-05, BUY CREATE, 24.05
+2000-01-06, Close, 22.63
+2000-01-06, BUY CREATE, 22.63
+2000-01-07, Close, 24.37
+...
+...
+...
+2000-12-20, BUY CREATE, 26.88
+2000-12-21, Close, 27.82
+2000-12-22, Close, 30.06
+2000-12-26, Close, 29.17
+2000-12-27, Close, 28.94
+2000-12-27, BUY CREATE, 28.94
+2000-12-28, Close, 29.29
+2000-12-29, Close, 27.41
+Final Portfolio Value: 99725.08
+</code></pre></div></div>
+
+<p>例子中发出了一些买入指令, 我们的资产组合也出现了下降. 这里我们显然漏掉了一些事情:</p>
+
+<ul>
+  <li>订单只是创建了, 但是不知道订单是否执行, 也不知道订单的执行时间和价格. 接下来的例子中将会监听订单的状态通知.</li>
+</ul>
+
+<p>好奇的读者可能会问购买了多少股, 具体是什么资产以及如何执行的订单. 在可能的情况下(本例是这样), 平台填补了:</p>
+
+<ul>
+  <li>
+    <p>在不指定资产(目标股票)的时候, 主数据(<code class="language-plaintext highlighter-rouge">self.datas[0]</code>, 也即系统时钟)就是目标数据.</p>
+  </li>
+  <li>
+    <p>数量使用固大小的 <code class="language-plaintext highlighter-rouge">sizer</code> 在幕后提供, 默认为 <code class="language-plaintext highlighter-rouge">1</code>. 后面的示例中我们修修改它.</p>
+  </li>
+  <li>
+    <p>订单以 <strong>市价</strong> 执行, Broker 使用下一根 bar 的开盘价执行此项, 因为这是当前 bar 之后的第一个价格变动.</p>
+  </li>
+  <li>
+    <p>订单在没有任何确认机制(以后会补上)的情况下执行</p>
+  </li>
+</ul>
+
+<p>别光顾着买, 我们还要卖!</p>
+
+<ul>
+  <li>
+    <p>Strategy 对象提供了对默认 Data Feed 的仓位(<code class="language-plaintext highlighter-rouge">position</code>)属性的访问</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">buy</code> 和 <code class="language-plaintext highlighter-rouge">sell</code> 方法返回创建(<code class="language-plaintext highlighter-rouge">created</code>, 尚未执行)的订单</p>
+  </li>
+  <li>
+    <p>订单状态的更改将通过通知(<code class="language-plaintext highlighter-rouge">notify</code>)方法通知策略</p>
+  </li>
+</ul>
+
+<p>我们的卖出策略也很简单:</p>
+
+<p>无论盈利与否, 都在 5 个 bar 之后(也即底 6 个 bar)的时候卖出. 请注意用 bar 的数量可以代表时间(1 分钟/小时/天/周/月等等)周期.</p>
+
+<p>在入市之前, 只允许买单(<code class="language-plaintext highlighter-rouge">buy</code>).</p>
+
+<blockquote>
+  <p><code class="language-plaintext highlighter-rouge">next</code> 方法收不到 <code class="language-plaintext highlighter-rouge">bar</code> 的 index 参数. 获取<em>第五根</em>这个信息可以通过更 pythonic 的方式: 对 <code class="language-plaintext highlighter-rouge">line</code> 对象调用 <code class="language-plaintext highlighter-rouge">len</code> 方法, 它会告诉你 <code class="language-plaintext highlighter-rouge">line</code> 的长度, 只需要在变量中记录下来操作时刻的线长度, 然后和当前长度比较就知道是否是第五根 bar.</p>
+</blockquote>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- y.py	2022-07-09 16:41:34.389643481 +0800
+</span><span class="gi">+++ x.py	2022-07-09 16:42:35.663290037 +0800
+</span><span class="p">@@ -20,19 +20,63 @@</span>
+         # Keep a reference to the "close" line in the data[0] dataseries
+         self.dataclose = self.datas[0].close
+<span class="err">
+</span><span class="gi">+        # To keep track of pending orders
++        self.order = None
++
++    def notify_order(self, order):
++        if order.status in [order.Submitted, order.Accepted]:
++            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
++            return
++
++        # Check if an order has been completed
++        # Attention: broker could reject order if not enough cash
++        if order.status in [order.Completed]:
++            if order.isbuy():
++                self.log('BUY EXECUTED, %.2f' % order.executed.price)
++            elif order.issell():
++                self.log('SELL EXECUTED, %.2f' % order.executed.price)
++
++            self.bar_executed = len(self)
++
++        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
++            self.log('Order Canceled/Margin/Rejected')
++
++        # Write down: no pending order
++        self.order = None
++
+</span>     def next(self):
+         # Simply log the closing price of the series from the reference
+         self.log('Close, %.2f' % self.dataclose[0])
+<span class="err">
+</span><span class="gd">-        if self.dataclose[0] &lt; self.dataclose[-1]:
+-            # current close less than previous close
+</span><span class="gi">+        # Check if an order is pending ... if yes, we cannot send a 2nd one
++        if self.order:
++            return
++
++        # Check if we are in the market
++        if not self.position:
++
++            # Not yet ... we MIGHT BUY if ...
++            if self.dataclose[0] &lt; self.dataclose[-1]:
++                # current close less than previous close
++
++                if self.dataclose[-1] &lt; self.dataclose[-2]:
++                    # previous close less than the previous close
++
++                    # BUY, BUY, BUY!!! (with default parameters)
++                    self.log('BUY CREATE, %.2f' % self.dataclose[0])
++
++                    # Keep track of the created order to avoid a 2nd order
++                    self.order = self.buy()
++
++        else:
+</span><span class="err">
+</span><span class="gd">-            if self.dataclose[-1] &lt; self.dataclose[-2]:
+-                # previous close less than the previous close
+</span><span class="gi">+            # Already in the market ... we might sell
++            if len(self) &gt;= (self.bar_executed + 5):
++                # SELL, SELL, SELL!!! (with all possible default parameters)
++                self.log('SELL CREATE, %.2f' % self.dataclose[0])
+</span><span class="err">
+</span><span class="gd">-                # BUY, BUY, BUY!!! (with all possible default parameters)
+-                self.log('BUY CREATE, %.2f' % self.dataclose[0])
+-                self.buy()
+</span><span class="gi">+                # Keep track of the created order to avoid a 2nd order
++                self.order = self.sell()
+</span><span class="err">
+
+</span> if __name__ == '__main__':
+</code></pre></div></div>
+
+<p>上面的脚本执行完成之后, 得到以下输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 100000.00
+2000-01-03T00:00:00, Close, 27.85
+2000-01-04T00:00:00, Close, 25.39
+2000-01-05T00:00:00, Close, 24.05
+2000-01-05T00:00:00, BUY CREATE, 24.05
+2000-01-06T00:00:00, BUY EXECUTED, 23.61
+2000-01-06T00:00:00, Close, 22.63
+2000-01-07T00:00:00, Close, 24.37
+2000-01-10T00:00:00, Close, 27.29
+2000-01-11T00:00:00, Close, 26.49
+2000-01-12T00:00:00, Close, 24.90
+2000-01-13T00:00:00, Close, 24.77
+2000-01-13T00:00:00, SELL CREATE, 24.77
+2000-01-14T00:00:00, SELL EXECUTED, 25.70
+2000-01-14T00:00:00, Close, 25.18
+...
+...
+...
+2000-12-15T00:00:00, SELL CREATE, 26.93
+2000-12-18T00:00:00, SELL EXECUTED, 28.29
+2000-12-18T00:00:00, Close, 30.18
+2000-12-19T00:00:00, Close, 28.88
+2000-12-20T00:00:00, Close, 26.88
+2000-12-20T00:00:00, BUY CREATE, 26.88
+2000-12-21T00:00:00, BUY EXECUTED, 26.23
+2000-12-21T00:00:00, Close, 27.82
+2000-12-22T00:00:00, Close, 30.06
+2000-12-26T00:00:00, Close, 29.17
+2000-12-27T00:00:00, Close, 28.94
+2000-12-28T00:00:00, Close, 29.29
+2000-12-29T00:00:00, Close, 27.41
+2000-12-29T00:00:00, SELL CREATE, 27.41
+Final Portfolio Value: 100018.53
+</code></pre></div></div>
+
+<p>可以看到, 结束的时候我们的钱变多了.</p>
+
+<p>一般券商会收取佣金(<code class="language-plaintext highlighter-rouge">commission</code>), 我们买入卖出的佣金费率都设置到 <code class="language-plaintext highlighter-rouge">0.1%</code>. 只需一行代码即可完成.</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- x.py	2022-07-09 22:25:52.204778015 +0800
+</span><span class="gi">+++ y.py	2022-07-09 22:25:12.029415237 +0800
+</span><span class="p">@@ -20,8 +20,10 @@</span>
+         # Keep a reference to the "close" line in the data[0] dataseries
+         self.dataclose = self.datas[0].close
+<span class="err">
+</span><span class="gd">-        # To keep track of pending orders
+</span><span class="gi">+        # To keep track of pending orders and buy price/commission
+</span>         self.order = None
+<span class="gi">+        self.buyprice = None
++        self.buycomm = None
+</span><span class="err">
+</span>     def notify_order(self, order):
+         if order.status in [order.Submitted, order.Accepted]:
+<span class="p">@@ -32,18 +34,28 @@</span>
+         # Attention: broker could reject order if not enough cash
+         if order.status in [order.Completed]:
+             if order.isbuy():
+<span class="gd">-                self.log('BUY EXECUTED, %.2f' % order.executed.price)
+-            elif order.issell():
+-                self.log('SELL EXECUTED, %.2f' % order.executed.price)
+</span><span class="gi">+                self.log('BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
++                         (order.executed.price, order.executed.value, order.executed.comm))
++
++                self.buyprice = order.executed.price
++                self.buycomm = order.executed.comm
++            else:  # Sell
++                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
++                         (order.executed.price, order.executed.value, order.executed.comm))
+</span><span class="err">
+</span>             self.bar_executed = len(self)
+<span class="err">
+</span>         elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+             self.log('Order Canceled/Margin/Rejected')
+<span class="err">
+</span><span class="gd">-        # Write down: no pending order
+</span>         self.order = None
+<span class="err">
+</span><span class="gi">+    def notify_trade(self, trade):
++        if not trade.isclosed:
++            return
++
++        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' % (trade.pnl, trade.pnlcomm))
++
+</span>     def next(self):
+         # Simply log the closing price of the series from the reference
+         self.log('Close, %.2f' % self.dataclose[0])
+<span class="p">@@ -107,6 +119,9 @@</span>
+     # Set our desired cash start
+     cerebro.broker.setcash(100000.0)
+<span class="err">
+</span><span class="gi">+    # Set the commission - 0.1% ... divide by 100 to remove the %
++    cerebro.broker.setcommission(commission=0.001)
++
+</span>     # Print out the starting conditions
+     print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+</code></pre></div></div>
+
+<p>运行脚本, 看一下在有佣金情况下的收益:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 100000.00
+2000-01-03T00:00:00, Close, 27.85
+2000-01-04T00:00:00, Close, 25.39
+2000-01-05T00:00:00, Close, 24.05
+2000-01-05T00:00:00, BUY CREATE, 24.05
+2000-01-06T00:00:00, BUY EXECUTED, Price: 23.61, Cost: 23.61, Commission 0.02
+2000-01-06T00:00:00, Close, 22.63
+2000-01-07T00:00:00, Close, 24.37
+2000-01-10T00:00:00, Close, 27.29
+2000-01-11T00:00:00, Close, 26.49
+2000-01-12T00:00:00, Close, 24.90
+2000-01-13T00:00:00, Close, 24.77
+2000-01-13T00:00:00, SELL CREATE, 24.77
+2000-01-14T00:00:00, SELL EXECUTED, Price: 25.70, Cost: 25.70, Commission 0.03
+2000-01-14T00:00:00, OPERATION PROFIT, GROSS 2.09, NET 2.04
+2000-01-14T00:00:00, Close, 25.18
+...
+...
+...
+2000-12-15T00:00:00, SELL CREATE, 26.93
+2000-12-18T00:00:00, SELL EXECUTED, Price: 28.29, Cost: 28.29, Commission 0.03
+2000-12-18T00:00:00, OPERATION PROFIT, GROSS -0.06, NET -0.12
+2000-12-18T00:00:00, Close, 30.18
+2000-12-19T00:00:00, Close, 28.88
+2000-12-20T00:00:00, Close, 26.88
+2000-12-20T00:00:00, BUY CREATE, 26.88
+2000-12-21T00:00:00, BUY EXECUTED, Price: 26.23, Cost: 26.23, Commission 0.03
+2000-12-21T00:00:00, Close, 27.82
+2000-12-22T00:00:00, Close, 30.06
+2000-12-26T00:00:00, Close, 29.17
+2000-12-27T00:00:00, Close, 28.94
+2000-12-28T00:00:00, Close, 29.29
+2000-12-29T00:00:00, Close, 27.41
+2000-12-29T00:00:00, SELL CREATE, 27.41
+Final Portfolio Value: 100016.98
+</code></pre></div></div>
+
+<p>数据显示依然是盈利的. 我们过滤出来 “OPERATION PROFIT” 相关数据单独看一下:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2000-01-14T00:00:00, OPERATION PROFIT, GROSS 2.09, NET 2.04
+2000-02-07T00:00:00, OPERATION PROFIT, GROSS 3.68, NET 3.63
+2000-02-28T00:00:00, OPERATION PROFIT, GROSS 4.48, NET 4.42
+2000-03-13T00:00:00, OPERATION PROFIT, GROSS 3.48, NET 3.41
+2000-03-22T00:00:00, OPERATION PROFIT, GROSS -0.41, NET -0.49
+2000-04-07T00:00:00, OPERATION PROFIT, GROSS 2.45, NET 2.37
+2000-04-20T00:00:00, OPERATION PROFIT, GROSS -1.95, NET -2.02
+2000-05-02T00:00:00, OPERATION PROFIT, GROSS 5.46, NET 5.39
+2000-05-11T00:00:00, OPERATION PROFIT, GROSS -3.74, NET -3.81
+2000-05-30T00:00:00, OPERATION PROFIT, GROSS -1.46, NET -1.53
+2000-07-05T00:00:00, OPERATION PROFIT, GROSS -1.62, NET -1.69
+2000-07-14T00:00:00, OPERATION PROFIT, GROSS 2.08, NET 2.01
+2000-07-28T00:00:00, OPERATION PROFIT, GROSS 0.14, NET 0.07
+2000-08-08T00:00:00, OPERATION PROFIT, GROSS 4.36, NET 4.29
+2000-08-21T00:00:00, OPERATION PROFIT, GROSS 1.03, NET 0.95
+2000-09-15T00:00:00, OPERATION PROFIT, GROSS -4.26, NET -4.34
+2000-09-27T00:00:00, OPERATION PROFIT, GROSS 1.29, NET 1.22
+2000-10-13T00:00:00, OPERATION PROFIT, GROSS -2.98, NET -3.04
+2000-10-26T00:00:00, OPERATION PROFIT, GROSS 3.01, NET 2.95
+2000-11-06T00:00:00, OPERATION PROFIT, GROSS -3.59, NET -3.65
+2000-11-16T00:00:00, OPERATION PROFIT, GROSS 1.28, NET 1.23
+2000-12-01T00:00:00, OPERATION PROFIT, GROSS 2.59, NET 2.54
+2000-12-18T00:00:00, OPERATION PROFIT, GROSS -0.06, NET -0.12
+</code></pre></div></div>
+
+<p>把净值(<code class="language-plaintext highlighter-rouge">NET</code>)加起来, 得到 <code class="language-plaintext highlighter-rouge">15.83</code>, 显然这个上面执行结果中的最终金额(<code class="language-plaintext highlighter-rouge">100016.98</code>)报告的收益 <code class="language-plaintext highlighter-rouge">16.98</code> 不符.</p>
+
+<p>这里实际上并没有出错, 而是 <code class="language-plaintext highlighter-rouge">15.83</code> 是钱袋子里面的净利润, 我们在 29 号还有一笔卖出操作(<code class="language-plaintext highlighter-rouge">2000-12-29T00:00:00, SELL CREATE, 27.41</code>), 这个操作已经提交, 但是却并没有执行.</p>
+
+<p>券商计算的价值是包含了以 2000-12-29 的收盘价成交的交易数据. 实际上策略执行订单的时候是在下一个交易日执行, 也就是 2001-01-02 日, 如果扩展 Data Feed 范围包含该日期, 我们会看到以下输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2001-01-02T00:00:00, SELL EXECUTED, Price: 27.87, Cost: 27.87, Commission 0.03
+2001-01-02T00:00:00, OPERATION PROFIT, GROSS 1.64, NET 1.59
+2001-01-02T00:00:00, Close, 24.87
+2001-01-02T00:00:00, BUY CREATE, 24.87
+Final Portfolio Value: 100017.41
+</code></pre></div></div>
+
+<p>在 2001-01-02 日执行了卖出操作, 此时把 OPERATION PROFIT 里面的利润再次相加(<code class="language-plaintext highlighter-rouge">15.83 + 1.59</code>), 得到 <code class="language-plaintext highlighter-rouge">17.42</code>. 刨除掉浮点数的精度损失, 现在结果就对得上了.</p>
+
+<h3 id="定制策略---parameters">定制策略 - Parameters</h3>
+
+<p>在策略中对某些值进行硬编码有点不切实际, 并且需要更改它们的时候也会比较费事, 此时可以使用参数(<code class="language-plaintext highlighter-rouge">Parameters</code>).</p>
+
+<p>参数的定义很简单, 看起来像这样:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">params</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="sh">'</span><span class="s">myparam</span><span class="sh">'</span><span class="p">,</span> <span class="mi">27</span><span class="p">),</span>
+    <span class="p">(</span><span class="sh">'</span><span class="s">exitbars</span><span class="sh">'</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div></div>
+
+<p>在使用策略的时候, 可以将参数定制化:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Add a strategy
+</span><span class="n">cerebro</span><span class="p">.</span><span class="nf">addstrategy</span><span class="p">(</span><span class="n">TestStrategy</span><span class="p">,</span> <span class="n">myparam</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">exitbars</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>在策略中使用参数也很简单, 他们都被保存在 params 属性中. 比方说我们想设置交易数量, 我们可以再 <code class="language-plaintext highlighter-rouge">init</code> 的时候给 <code class="language-plaintext highlighter-rouge">sizer</code> 设置参数如下:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Set the sizer stake from the params
+</span><span class="n">self</span><span class="p">.</span><span class="n">sizer</span><span class="p">.</span><span class="nf">setsizing</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">stake</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>当然我们也可以在 <code class="language-plaintext highlighter-rouge">buy</code> 或者 <code class="language-plaintext highlighter-rouge">sell</code> 调用的时候, 设置交易数量:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">self</span><span class="p">.</span><span class="nf">buy</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">stake</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>也可以把卖出时机参数化:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Already in the market ... we might sell
+</span><span class="k">if</span> <span class="nf">len</span><span class="p">(</span><span class="n">self</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">bar_executed</span> <span class="o">+</span> <span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">exitbars</span><span class="p">):</span>
+</code></pre></div></div>
+
+<p>上面相关改动如下:</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- y.py	2022-07-09 23:05:30.201865643 +0800
+</span><span class="gi">+++ x.py	2022-07-09 23:01:58.712281938 +0800
+</span><span class="p">@@ -10,6 +10,7 @@</span>
+<span class="err">
+</span> # Create a Stratey
+ class TestStrategy(bt.Strategy):
+<span class="gi">+    params = (('exitbars', 5), )
+</span><span class="err">
+</span>     def log(self, txt, dt=None):
+         ''' Logging function fot this strategy'''
+<span class="p">@@ -83,7 +84,7 @@</span>
+         else:
+<span class="err">
+</span>             # Already in the market ... we might sell
+<span class="gd">-            if len(self) &gt;= (self.bar_executed + 5):
+</span><span class="gi">+            if len(self) &gt;= (self.bar_executed + self.params.exitbars):
+</span>                 # SELL, SELL, SELL!!! (with all possible default parameters)
+                 self.log('SELL CREATE, %.2f' % self.dataclose[0])
+<span class="err">
+</span><span class="p">@@ -119,6 +120,9 @@</span>
+     # Set our desired cash start
+     cerebro.broker.setcash(100000.0)
+<span class="err">
+</span><span class="gi">+    # Add a FixedSize sizer according to the stake
++    cerebro.addsizer(bt.sizers.FixedSize, stake=10)
++
+</span>     # Set the commission - 0.1% ... divide by 100 to remove the %
+     cerebro.broker.setcommission(commission=0.001)
+</code></pre></div></div>
+
+<blockquote>
+  <p>全部代码参考:</p>
+</blockquote>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="n">__future__</span> <span class="kn">import</span> <span class="p">(</span><span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span>
+                        <span class="n">unicode_literals</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="n">datetime</span>  <span class="c1"># For datetime objects
+</span><span class="kn">import</span> <span class="n">os.path</span>  <span class="c1"># To manage paths
+</span><span class="kn">import</span> <span class="n">sys</span>  <span class="c1"># To find out the script name (in argv[0])
+</span>
+<span class="c1"># Import the backtrader platform
+</span><span class="kn">import</span> <span class="n">backtrader</span> <span class="k">as</span> <span class="n">bt</span>
+
+
+<span class="c1"># Create a Stratey
+</span><span class="k">class</span> <span class="nc">TestStrategy</span><span class="p">(</span><span class="n">bt</span><span class="p">.</span><span class="n">Strategy</span><span class="p">):</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="sh">'</span><span class="s">exitbars</span><span class="sh">'</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">log</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">txt</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sh">'''</span><span class="s"> Logging function fot this strategy</span><span class="sh">'''</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span> <span class="ow">or</span> <span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">datetime</span><span class="p">.</span><span class="nf">date</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">%s, %s</span><span class="sh">'</span> <span class="o">%</span> <span class="p">(</span><span class="n">dt</span><span class="p">.</span><span class="nf">isoformat</span><span class="p">(),</span> <span class="n">txt</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="c1"># Keep a reference to the "close" line in the data[0] dataseries
+</span>        <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">close</span>
+
+        <span class="c1"># To keep track of pending orders and buy price/commission
+</span>        <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">buyprice</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">buycomm</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">def</span> <span class="nf">notify_order</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">order</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Submitted</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Accepted</span><span class="p">]:</span>
+            <span class="c1"># Buy/Sell order submitted/accepted to/by broker - Nothing to do
+</span>            <span class="k">return</span>
+
+        <span class="c1"># Check if an order has been completed
+</span>        <span class="c1"># Attention: broker could reject order if not enough cash
+</span>        <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Completed</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="nf">isbuy</span><span class="p">():</span>
+                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span>
+                    <span class="sh">'</span><span class="s">BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f</span><span class="sh">'</span> <span class="o">%</span>
+                    <span class="p">(</span><span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span><span class="p">,</span>
+                     <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span><span class="p">))</span>
+
+                <span class="n">self</span><span class="p">.</span><span class="n">buyprice</span> <span class="o">=</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span>
+                <span class="n">self</span><span class="p">.</span><span class="n">buycomm</span> <span class="o">=</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Sell
+</span>                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f</span><span class="sh">'</span> <span class="o">%</span>
+                         <span class="p">(</span><span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span><span class="p">,</span>
+                          <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">value</span><span class="p">,</span>
+                          <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span><span class="p">))</span>
+
+            <span class="n">self</span><span class="p">.</span><span class="n">bar_executed</span> <span class="o">=</span> <span class="nf">len</span><span class="p">(</span><span class="n">self</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Canceled</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Margin</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Rejected</span><span class="p">]:</span>
+            <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">Order Canceled/Margin/Rejected</span><span class="sh">'</span><span class="p">)</span>
+
+        <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">def</span> <span class="nf">notify_trade</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">trade</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">trade</span><span class="p">.</span><span class="n">isclosed</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">OPERATION PROFIT, GROSS %.2f, NET %.2f</span><span class="sh">'</span> <span class="o">%</span>
+                 <span class="p">(</span><span class="n">trade</span><span class="p">.</span><span class="n">pnl</span><span class="p">,</span> <span class="n">trade</span><span class="p">.</span><span class="n">pnlcomm</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="c1"># Simply log the closing price of the series from the reference
+</span>        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">Close, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="c1"># Check if an order is pending ... if yes, we cannot send a 2nd one
+</span>        <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">order</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Check if we are in the market
+</span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">self</span><span class="p">.</span><span class="n">position</span><span class="p">:</span>
+
+            <span class="c1"># Not yet ... we MIGHT BUY if ...
+</span>            <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="c1"># current close less than previous close
+</span>
+                    <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]:</span>
+                        <span class="c1"># previous close less than the previous close
+</span>
+                        <span class="c1"># BUY, BUY, BUY!!! (with default parameters)
+</span>                        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">BUY CREATE, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                        <span class="c1"># Keep track of the created order to avoid a 2nd order
+</span>                        <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">buy</span><span class="p">()</span>
+
+        <span class="k">else</span><span class="p">:</span>
+
+            <span class="c1"># Already in the market ... we might sell
+</span>            <span class="k">if</span> <span class="nf">len</span><span class="p">(</span><span class="n">self</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">bar_executed</span> <span class="o">+</span> <span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">exitbars</span><span class="p">):</span>
+                <span class="c1"># SELL, SELL, SELL!!! (with all possible default parameters)
+</span>                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">SELL CREATE, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="c1"># Keep track of the created order to avoid a 2nd order
+</span>                <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">sell</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="sh">'</span><span class="s">__main__</span><span class="sh">'</span><span class="p">:</span>
+    <span class="c1"># Create a cerebro entity
+</span>    <span class="n">cerebro</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="nc">Cerebro</span><span class="p">()</span>
+
+    <span class="c1"># Add a strategy
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">addstrategy</span><span class="p">(</span><span class="n">TestStrategy</span><span class="p">)</span>
+
+    <span class="c1"># Datas are in a subfolder of the samples. Need to find where the script is
+</span>    <span class="c1"># because it could have been called from anywhere
+</span>    <span class="n">modpath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">dirname</span><span class="p">(</span><span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">abspath</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="n">datapath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="n">modpath</span><span class="p">,</span> <span class="sh">'</span><span class="s">../../datas/orcl-1995-2014.txt</span><span class="sh">'</span><span class="p">)</span>
+
+    <span class="c1"># Create a Data Feed
+</span>    <span class="n">data</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">feeds</span><span class="p">.</span><span class="nc">YahooFinanceCSVData</span><span class="p">(</span>
+        <span class="n">dataname</span><span class="o">=</span><span class="n">datapath</span><span class="p">,</span>
+        <span class="c1"># Do not pass values before this date
+</span>        <span class="n">fromdate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="c1"># Do not pass values before this date
+</span>        <span class="n">todate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">31</span><span class="p">),</span>
+        <span class="c1"># Do not pass values after this date
+</span>        <span class="n">reverse</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="c1"># Add the Data Feed to Cerebro
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">adddata</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="c1"># Set our desired cash start
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">setcash</span><span class="p">(</span><span class="mf">100000.0</span><span class="p">)</span>
+
+    <span class="c1"># Add a FixedSize sizer according to the stake
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">addsizer</span><span class="p">(</span><span class="n">bt</span><span class="p">.</span><span class="n">sizers</span><span class="p">.</span><span class="n">FixedSize</span><span class="p">,</span> <span class="n">stake</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="c1"># Set the commission - 0.1% ... divide by 100 to remove the %
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">setcommission</span><span class="p">(</span><span class="n">commission</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span>
+
+    <span class="c1"># Print out the starting conditions
+</span>    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Starting Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+
+    <span class="c1"># Run over everything
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">run</span><span class="p">()</span>
+
+    <span class="c1"># Print out the final result
+</span>    <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">Final Portfolio Value: %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">())</span>
+</code></pre></div></div>
+
+<p>输出如下:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 100000.00
+2000-01-03T00:00:00, Close, 27.85
+2000-01-04T00:00:00, Close, 25.39
+2000-01-05T00:00:00, Close, 24.05
+2000-01-05T00:00:00, BUY CREATE, 24.05
+2000-01-06T00:00:00, BUY EXECUTED, Size 10, Price: 23.61, Cost: 236.10, Commission 0.24
+2000-01-06T00:00:00, Close, 22.63
+...
+...
+...
+2000-12-20T00:00:00, BUY CREATE, 26.88
+2000-12-21T00:00:00, BUY EXECUTED, Size 10, Price: 26.23, Cost: 262.30, Commission 0.26
+2000-12-21T00:00:00, Close, 27.82
+2000-12-22T00:00:00, Close, 30.06
+2000-12-26T00:00:00, Close, 29.17
+2000-12-27T00:00:00, Close, 28.94
+2000-12-28T00:00:00, Close, 29.29
+2000-12-29T00:00:00, Close, 27.41
+2000-12-29T00:00:00, SELL CREATE, 27.41
+Final Portfolio Value: 100169.80
+</code></pre></div></div>
+
+<p>为了直观显示每次操作数量, 日志里把 size 也打印出来了. 可以看到每次操作数量增加 10 倍, 最后的收益也跟着增加了 10 倍(从 <code class="language-plaintext highlighter-rouge">16.98</code> 到 <code class="language-plaintext highlighter-rouge">169.80</code>).</p>
+
+<h3 id="添加指标indicator">添加指标(<code class="language-plaintext highlighter-rouge">indicator</code>)</h3>
+
+<p>本例中我们使用移动平均线(Simple Moving Average)策略.</p>
+
+<ul>
+  <li>如果收盘价大于当前均价, 那么执行市价买入</li>
+  <li>如果有持仓, 并且收盘价小于均线, 执行卖出</li>
+  <li>操作过程中只允许有一个活跃操作(订单)</li>
+</ul>
+
+<p>只需要一点改动即可实现上面的策略, 首先在 <code class="language-plaintext highlighter-rouge">init</code> 的时候加入均线指标:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">self</span><span class="p">.</span><span class="n">sma</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">MovingAverageSimple</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">period</span><span class="o">=</span><span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">maperiod</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>买入卖出的时机也需要微调, 整体代码 diff 如下(现金设置为 1000, 不收佣金):</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- x.py	2022-07-09 23:18:14.011198706 +0800
+</span><span class="gi">+++ y.py	2022-07-09 23:18:41.734396585 +0800
+</span><span class="p">@@ -10,7 +10,7 @@</span>
+<span class="err">
+</span> # Create a Stratey
+ class TestStrategy(bt.Strategy):
+<span class="gd">-    params = (('exitbars', 5), )
+</span><span class="gi">+    params = (('maperiod', 15), )
+</span><span class="err">
+</span>     def log(self, txt, dt=None):
+         ''' Logging function fot this strategy'''
+<span class="p">@@ -26,6 +26,9 @@</span>
+         self.buyprice = None
+         self.buycomm = None
+<span class="err">
+</span><span class="gi">+        # Add a MovingAverageSimple indicator
++        self.sma = bt.indicators.SimpleMovingAverage(self.datas[0], period=self.params.maperiod)
++
+</span>     def notify_order(self, order):
+         if order.status in [order.Submitted, order.Accepted]:
+             # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+<span class="p">@@ -69,22 +72,17 @@</span>
+         if not self.position:
+<span class="err">
+</span>             # Not yet ... we MIGHT BUY if ...
+<span class="gd">-            if self.dataclose[0] &lt; self.dataclose[-1]:
+-                # current close less than previous close
+-
+-                if self.dataclose[-1] &lt; self.dataclose[-2]:
+-                    # previous close less than the previous close
+</span><span class="gi">+            if self.dataclose[0] &gt; self.sma[0]:
+</span><span class="err">
+</span><span class="gd">-                    # BUY, BUY, BUY!!! (with default parameters)
+-                    self.log('BUY CREATE, %.2f' % self.dataclose[0])
+</span><span class="gi">+                # BUY, BUY, BUY!!! (with all possible default parameters)
++                self.log('BUY CREATE, %.2f' % self.dataclose[0])
+</span><span class="err">
+</span><span class="gd">-                    # Keep track of the created order to avoid a 2nd order
+-                    self.order = self.buy()
+</span><span class="gi">+                # Keep track of the created order to avoid a 2nd order
++                self.order = self.buy()
+</span><span class="err">
+</span>         else:
+<span class="err">
+</span><span class="gd">-            # Already in the market ... we might sell
+-            if len(self) &gt;= (self.bar_executed + self.params.exitbars):
+</span><span class="gi">+            if self.dataclose[0] &lt; self.sma[0]:
+</span>                 # SELL, SELL, SELL!!! (with all possible default parameters)
+                 self.log('SELL CREATE, %.2f' % self.dataclose[0])
+<span class="err">
+</span><span class="p">@@ -118,13 +116,13 @@</span>
+     cerebro.adddata(data)
+<span class="err">
+</span>     # Set our desired cash start
+<span class="gd">-    cerebro.broker.setcash(100000.0)
+</span><span class="gi">+    cerebro.broker.setcash(1000.0)
+</span><span class="err">
+</span>     # Add a FixedSize sizer according to the stake
+     cerebro.addsizer(bt.sizers.FixedSize, stake=10)
+<span class="err">
+</span><span class="gd">-    # Set the commission - 0.1% ... divide by 100 to remove the %
+-    cerebro.broker.setcommission(commission=0.001)
+</span><span class="gi">+    # Set the commission
++    cerebro.broker.setcommission(commission=0.0)
+</span><span class="err">
+</span>     # Print out the starting conditions
+     print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+</code></pre></div></div>
+
+<p>执行结果如下:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting Portfolio Value: 1000.00
+2000-01-24T00:00:00, Close, 25.55
+2000-01-25T00:00:00, Close, 26.61
+2000-01-25T00:00:00, BUY CREATE, 26.61
+2000-01-26T00:00:00, BUY EXECUTED, Size 10, Price: 26.76, Cost: 267.60, Commission 0.00
+2000-01-26T00:00:00, Close, 25.96
+2000-01-27T00:00:00, Close, 24.43
+2000-01-27T00:00:00, SELL CREATE, 24.43
+2000-01-28T00:00:00, SELL EXECUTED, Size 10, Price: 24.28, Cost: 242.80, Commission 0.00
+2000-01-28T00:00:00, OPERATION PROFIT, GROSS -24.80, NET -24.80
+2000-01-28T00:00:00, Close, 22.34
+2000-01-31T00:00:00, Close, 23.55
+2000-02-01T00:00:00, Close, 25.46
+2000-02-02T00:00:00, Close, 25.61
+2000-02-02T00:00:00, BUY CREATE, 25.61
+2000-02-03T00:00:00, BUY EXECUTED, Size 10, Price: 26.11, Cost: 261.10, Commission 0.00
+...
+...
+...
+2000-12-20T00:00:00, SELL CREATE, 26.88
+2000-12-21T00:00:00, SELL EXECUTED, Size 10, Price: 26.23, Cost: 262.30, Commission 0.00
+2000-12-21T00:00:00, OPERATION PROFIT, GROSS -20.60, NET -20.60
+2000-12-21T00:00:00, Close, 27.82
+2000-12-21T00:00:00, BUY CREATE, 27.82
+2000-12-22T00:00:00, BUY EXECUTED, Size 10, Price: 28.65, Cost: 286.50, Commission 0.00
+2000-12-22T00:00:00, Close, 30.06
+2000-12-26T00:00:00, Close, 29.17
+2000-12-27T00:00:00, Close, 28.94
+2000-12-28T00:00:00, Close, 29.29
+2000-12-29T00:00:00, Close, 27.41
+2000-12-29T00:00:00, SELL CREATE, 27.41
+Final Portfolio Value: 973.90
+</code></pre></div></div>
+
+<p>仔细看日志中的输出, 你会发现第一个输出不再是 2000-01-03, 而是 2000-01-24, 前面的时间去哪里了?</p>
+
+<p>丢掉的日期其实并没有真的倍丢掉, backtrader 只是适应了一下最新的情况: 有一条移动平均线被加入到了策略中来. 指标需要 N 天来计算第一个输出, 在本例中是 15, 而 2000-01-24 正是第 15 天(第 15 根 bar).</p>
+
+<p>backtrader 假设只有在指标计算完成的时候才发起第一次 <code class="language-plaintext highlighter-rouge">next</code> 调用, 实例的策略中只有一个指标, 如果有多个指标, 那就要等最晚的那个指标有第一个 output 的时候, 才会发起第一次 <code class="language-plaintext highlighter-rouge">next</code> 调用.</p>
+
+<p>观察输出我们看到, 这次的收益实际上是负的, 加指标并没有让我们更赚钱…. 😂</p>
+
+<blockquote>
+  <p>因为浮点数的精度问题, 相同的数据相同的策略可能出现一点点微小的差别.</p>
+</blockquote>
+
+<h3 id="可视化-绘制图表">可视化: 绘制图表</h3>
+
+<p>之前我们只是在每个 bar 打印了相关输出, 但是人类是非常视觉的动物, 这里我们介绍如何把结果绘制出来.</p>
+
+<blockquote>
+  <p>为了画图, 需要安装 <code class="language-plaintext highlighter-rouge">matplotlib</code> 库.</p>
+</blockquote>
+
+<p>backtrader 内置了一个绘图功能, 只需要在 <code class="language-plaintext highlighter-rouge">cerebro.run()</code> 之后加一行代码调用即可:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">cerebro</span><span class="p">.</span><span class="nf">plot</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>问了展示在绘图结果中做一些简单的自定义功能, 我们将添加以下内容到图上:</p>
+
+<ul>
+  <li>指数移动平均线(EMA)</li>
+  <li>加权移动平均线(WMA)</li>
+  <li>慢速随机指标</li>
+  <li>异同移动平均线(MACD)</li>
+  <li>相对强弱指标(RSI)</li>
+  <li>简单移动平均线(SMA)将会随 RSI 指标一起绘制</li>
+  <li>平均真实波动范围(AverageTrueRange, ATR), 默认不显示</li>
+</ul>
+
+<p>默认这些指标在策略 <code class="language-plaintext highlighter-rouge">init</code> 中的代码如下:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Indicators for the plotting show
+</span><span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">ExponentialMovingAverage</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">period</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
+<span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">WeightedMovingAverage</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">period</span><span class="o">=</span><span class="mi">25</span><span class="p">).</span><span class="n">subplot</span> <span class="o">=</span> <span class="bp">True</span>
+<span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">StochasticSlow</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">MACDHisto</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">rsi</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">RSI</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">SmoothedMovingAverage</span><span class="p">(</span><span class="n">rsi</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">ATR</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="n">plot</span> <span class="o">=</span> <span class="bp">False</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>即便这些指标没有显式的加入到策略的成员变量中, 它们也会自动被注册到策略中, 并且会影响调用 <code class="language-plaintext highlighter-rouge">next</code> 方法的最小 bar.</p>
+</blockquote>
+
+<p>代码改动 diff:</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- x.py	2022-07-10 00:15:40.176306415 +0800
+</span><span class="gi">+++ y.py	2022-07-10 00:16:56.484414551 +0800
+</span><span class="p">@@ -29,6 +29,15 @@</span>
+         # Add a MovingAverageSimple indicator
+         self.sma = bt.indicators.SimpleMovingAverage(self.datas[0], period=self.params.maperiod)
+<span class="err">
+</span><span class="gi">+        # Indicators for the plotting show
++        bt.indicators.ExponentialMovingAverage(self.datas[0], period=25)
++        bt.indicators.WeightedMovingAverage(self.datas[0], period=25, subplot=True)
++        bt.indicators.StochasticSlow(self.datas[0])
++        bt.indicators.MACDHisto(self.datas[0])
++        rsi = bt.indicators.RSI(self.datas[0])
++        bt.indicators.SmoothedMovingAverage(rsi, period=10)
++        bt.indicators.ATR(self.datas[0], plot=False)
++
+</span>     def notify_order(self, order):
+         if order.status in [order.Submitted, order.Accepted]:
+             # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+<span class="p">@@ -131,4 +140,7 @@</span>
+     cerebro.run()
+<span class="err">
+</span>     # Print out the final result
+<span class="gd">-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
+</span>\ No newline at end of file
+<span class="gi">+    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
++
++    # Plot the result
++    cerebro.plot()
+</span>\ No newline at end of file
+</code></pre></div></div>
+
+<h3 id="优化">优化</h3>
+
+<p>在开始绘图示例之前, 我们使用的 SMA 周期是 15, 这个参数实际上是一个策略参数, 可以针对不同的股票不同的市场做定制, 知道找到自己认为最合适的参数值.</p>
+
+<blockquote>
+  <p>There is plenty of literature about Optimization and associated pros and cons. But the advice will always point in the same direction: do not overoptimize. If a trading idea is not sound, optimizing may end producing a positive result which is only valid for the backtested dataset.</p>
+</blockquote>
+
+<p>接下来的示例中修改了 SMA 的周期, 简单起见任何关于买入卖出的日志也都被移除.</p>
+
+<p>代码 diff:</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gd">--- x.py	2022-07-10 00:21:03.903780834 +0800
+</span><span class="gi">+++ y.py	2022-07-10 00:22:52.294211036 +0800
+</span><span class="p">@@ -10,12 +10,16 @@</span>
+<span class="err">
+</span> # Create a Stratey
+ class TestStrategy(bt.Strategy):
+<span class="gd">-    params = (('maperiod', 15), )
+</span><span class="gi">+    params = (
++        ('maperiod', 15),
++        ('printlog', False),
++    )
+</span><span class="err">
+</span><span class="gd">-    def log(self, txt, dt=None):
+</span><span class="gi">+    def log(self, txt, dt=None, doprint=False):
+</span>         ''' Logging function fot this strategy'''
+<span class="gd">-        dt = dt or self.datas[0].datetime.date(0)
+-        print('%s, %s' % (dt.isoformat(), txt))
+</span><span class="gi">+        if self.params.printlog or doprint:
++            dt = dt or self.datas[0].datetime.date(0)
++            print('%s, %s' % (dt.isoformat(), txt))
+</span><span class="err">
+</span>     def __init__(self):
+         # Keep a reference to the "close" line in the data[0] dataseries
+<span class="p">@@ -29,15 +33,6 @@</span>
+         # Add a MovingAverageSimple indicator
+         self.sma = bt.indicators.SimpleMovingAverage(self.datas[0], period=self.params.maperiod)
+<span class="err">
+</span><span class="gd">-        # Indicators for the plotting show
+-        bt.indicators.ExponentialMovingAverage(self.datas[0], period=25)
+-        bt.indicators.WeightedMovingAverage(self.datas[0], period=25, subplot=True)
+-        bt.indicators.StochasticSlow(self.datas[0])
+-        bt.indicators.MACDHisto(self.datas[0])
+-        rsi = bt.indicators.RSI(self.datas[0])
+-        bt.indicators.SmoothedMovingAverage(rsi, period=10)
+-        bt.indicators.ATR(self.datas[0], plot=False)
+-
+</span>     def notify_order(self, order):
+         if order.status in [order.Submitted, order.Accepted]:
+             # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+<span class="p">@@ -98,13 +93,16 @@</span>
+                 # Keep track of the created order to avoid a 2nd order
+                 self.order = self.sell()
+<span class="err">
+</span><span class="gi">+    def stop(self):
++        self.log('(MA Period %2d) Ending Value %.2f' % (self.params.maperiod, self.broker.getvalue()), doprint=True)
++
+</span><span class="err">
+</span> if __name__ == '__main__':
+     # Create a cerebro entity
+     cerebro = bt.Cerebro()
+<span class="err">
+</span>     # Add a strategy
+<span class="gd">-    cerebro.addstrategy(TestStrategy)
+</span><span class="gi">+    strats = cerebro.optstrategy(TestStrategy, maperiod=range(10, 31))
+</span><span class="err">
+</span>     # Datas are in a subfolder of the samples. Need to find where the script is
+     # because it could have been called from anywhere
+<span class="p">@@ -133,14 +131,5 @@</span>
+     # Set the commission
+     cerebro.broker.setcommission(commission=0.0)
+<span class="err">
+</span><span class="gd">-    # Print out the starting conditions
+-    print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+-
+</span>     # Run over everything
+<span class="gd">-    cerebro.run()
+-
+-    # Print out the final result
+-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
+-
+-    # Plot the result
+-    cerebro.plot()
+</span>\ No newline at end of file
+<span class="gi">+    cerebro.run(maxcpus=1)
+</span>\ No newline at end of file
+</code></pre></div></div>
+
+<p>代码:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="n">__future__</span> <span class="kn">import</span> <span class="p">(</span><span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="n">datetime</span>  <span class="c1"># For datetime objects
+</span><span class="kn">import</span> <span class="n">os.path</span>  <span class="c1"># To manage paths
+</span><span class="kn">import</span> <span class="n">sys</span>  <span class="c1"># To find out the script name (in argv[0])
+</span>
+<span class="c1"># Import the backtrader platform
+</span><span class="kn">import</span> <span class="n">backtrader</span> <span class="k">as</span> <span class="n">bt</span>
+
+
+<span class="c1"># Create a Stratey
+</span><span class="k">class</span> <span class="nc">TestStrategy</span><span class="p">(</span><span class="n">bt</span><span class="p">.</span><span class="n">Strategy</span><span class="p">):</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="sh">'</span><span class="s">maperiod</span><span class="sh">'</span><span class="p">,</span> <span class="mi">15</span><span class="p">),</span>
+        <span class="p">(</span><span class="sh">'</span><span class="s">printlog</span><span class="sh">'</span><span class="p">,</span> <span class="bp">False</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">log</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">txt</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">doprint</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sh">'''</span><span class="s"> Logging function fot this strategy</span><span class="sh">'''</span>
+        <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">printlog</span> <span class="ow">or</span> <span class="n">doprint</span><span class="p">:</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span> <span class="ow">or</span> <span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">datetime</span><span class="p">.</span><span class="nf">date</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">%s, %s</span><span class="sh">'</span> <span class="o">%</span> <span class="p">(</span><span class="n">dt</span><span class="p">.</span><span class="nf">isoformat</span><span class="p">(),</span> <span class="n">txt</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="c1"># Keep a reference to the "close" line in the data[0] dataseries
+</span>        <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">close</span>
+
+        <span class="c1"># To keep track of pending orders and buy price/commission
+</span>        <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">buyprice</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">buycomm</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="c1"># Add a MovingAverageSimple indicator
+</span>        <span class="n">self</span><span class="p">.</span><span class="n">sma</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">indicators</span><span class="p">.</span><span class="nc">SimpleMovingAverage</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">datas</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">period</span><span class="o">=</span><span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">maperiod</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">notify_order</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">order</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Submitted</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Accepted</span><span class="p">]:</span>
+            <span class="c1"># Buy/Sell order submitted/accepted to/by broker - Nothing to do
+</span>            <span class="k">return</span>
+
+        <span class="c1"># Check if an order has been completed
+</span>        <span class="c1"># Attention: broker could reject order if not enough cash
+</span>        <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Completed</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">order</span><span class="p">.</span><span class="nf">isbuy</span><span class="p">():</span>
+                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f</span><span class="sh">'</span> <span class="o">%</span>
+                         <span class="p">(</span><span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">value</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span><span class="p">))</span>
+
+                <span class="n">self</span><span class="p">.</span><span class="n">buyprice</span> <span class="o">=</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span>
+                <span class="n">self</span><span class="p">.</span><span class="n">buycomm</span> <span class="o">=</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Sell
+</span>                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f</span><span class="sh">'</span> <span class="o">%</span>
+                         <span class="p">(</span><span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">price</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">value</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">executed</span><span class="p">.</span><span class="n">comm</span><span class="p">))</span>
+
+            <span class="n">self</span><span class="p">.</span><span class="n">bar_executed</span> <span class="o">=</span> <span class="nf">len</span><span class="p">(</span><span class="n">self</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">order</span><span class="p">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">[</span><span class="n">order</span><span class="p">.</span><span class="n">Canceled</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Margin</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">Rejected</span><span class="p">]:</span>
+            <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">Order Canceled/Margin/Rejected</span><span class="sh">'</span><span class="p">)</span>
+
+        <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">def</span> <span class="nf">notify_trade</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">trade</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">trade</span><span class="p">.</span><span class="n">isclosed</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">OPERATION PROFIT, GROSS %.2f, NET %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="p">(</span><span class="n">trade</span><span class="p">.</span><span class="n">pnl</span><span class="p">,</span> <span class="n">trade</span><span class="p">.</span><span class="n">pnlcomm</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="c1"># Simply log the closing price of the series from the reference
+</span>        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">Close, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="c1"># Check if an order is pending ... if yes, we cannot send a 2nd one
+</span>        <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">order</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Check if we are in the market
+</span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">self</span><span class="p">.</span><span class="n">position</span><span class="p">:</span>
+
+            <span class="c1"># Not yet ... we MIGHT BUY if ...
+</span>            <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">self</span><span class="p">.</span><span class="n">sma</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+
+                <span class="c1"># BUY, BUY, BUY!!! (with all possible default parameters)
+</span>                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">BUY CREATE, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="c1"># Keep track of the created order to avoid a 2nd order
+</span>                <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">buy</span><span class="p">()</span>
+
+        <span class="k">else</span><span class="p">:</span>
+
+            <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">self</span><span class="p">.</span><span class="n">sma</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="c1"># SELL, SELL, SELL!!! (with all possible default parameters)
+</span>                <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">SELL CREATE, %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="n">self</span><span class="p">.</span><span class="n">dataclose</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="c1"># Keep track of the created order to avoid a 2nd order
+</span>                <span class="n">self</span><span class="p">.</span><span class="n">order</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">sell</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="n">self</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="sh">'</span><span class="s">(MA Period %2d) Ending Value %.2f</span><span class="sh">'</span> <span class="o">%</span> <span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">params</span><span class="p">.</span><span class="n">maperiod</span><span class="p">,</span> <span class="n">self</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">getvalue</span><span class="p">()),</span> <span class="n">doprint</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="sh">'</span><span class="s">__main__</span><span class="sh">'</span><span class="p">:</span>
+    <span class="c1"># Create a cerebro entity
+</span>    <span class="n">cerebro</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="nc">Cerebro</span><span class="p">()</span>
+
+    <span class="c1"># Add a strategy
+</span>    <span class="n">strats</span> <span class="o">=</span> <span class="n">cerebro</span><span class="p">.</span><span class="nf">optstrategy</span><span class="p">(</span><span class="n">TestStrategy</span><span class="p">,</span> <span class="n">maperiod</span><span class="o">=</span><span class="nf">range</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">31</span><span class="p">))</span>
+
+    <span class="c1"># Datas are in a subfolder of the samples. Need to find where the script is
+</span>    <span class="c1"># because it could have been called from anywhere
+</span>    <span class="n">modpath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">dirname</span><span class="p">(</span><span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">abspath</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="n">datapath</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">path</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="n">modpath</span><span class="p">,</span> <span class="sh">'</span><span class="s">data/example.csv</span><span class="sh">'</span><span class="p">)</span>
+
+    <span class="c1"># Create a Data Feed
+</span>    <span class="n">data</span> <span class="o">=</span> <span class="n">bt</span><span class="p">.</span><span class="n">feeds</span><span class="p">.</span><span class="nc">YahooFinanceCSVData</span><span class="p">(</span>
+        <span class="n">dataname</span><span class="o">=</span><span class="n">datapath</span><span class="p">,</span>
+        <span class="c1"># Do not pass values before this date
+</span>        <span class="n">fromdate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="c1"># Do not pass values before this date
+</span>        <span class="n">todate</span><span class="o">=</span><span class="n">datetime</span><span class="p">.</span><span class="nf">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">31</span><span class="p">),</span>
+        <span class="c1"># Do not pass values after this date
+</span>        <span class="n">reverse</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="c1"># Add the Data Feed to Cerebro
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">adddata</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="c1"># Set our desired cash start
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">setcash</span><span class="p">(</span><span class="mf">1000.0</span><span class="p">)</span>
+
+    <span class="c1"># Add a FixedSize sizer according to the stake
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">addsizer</span><span class="p">(</span><span class="n">bt</span><span class="p">.</span><span class="n">sizers</span><span class="p">.</span><span class="n">FixedSize</span><span class="p">,</span> <span class="n">stake</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="c1"># Set the commission
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="n">broker</span><span class="p">.</span><span class="nf">setcommission</span><span class="p">(</span><span class="n">commission</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="c1"># Run over everything
+</span>    <span class="n">cerebro</span><span class="p">.</span><span class="nf">run</span><span class="p">(</span><span class="n">maxcpus</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>这次我们没有 <code class="language-plaintext highlighter-rouge">addstrategy</code> 添加策略, 而是使用 <code class="language-plaintext highlighter-rouge">optstrategy</code> 来优化策略. 对应的参数也没有传递值, 而是传递了一个范围.</p>
+
+<p>还加了一个策略钩子函数(<code class="language-plaintext highlighter-rouge">stop</code>), 当数据被消费完并且回测完成的时候这个回调就会被调用, 这里它被用来打印最后的账户净值.</p>
+
+<p>系统将会对范围参数里面的每个值, 都执行一遍策略. 下面是这次执行的输出:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2000-12-29, (MA Period 10) Ending Value 880.30
+2000-12-29, (MA Period 11) Ending Value 880.00
+2000-12-29, (MA Period 12) Ending Value 830.30
+2000-12-29, (MA Period 13) Ending Value 893.90
+2000-12-29, (MA Period 14) Ending Value 896.90
+2000-12-29, (MA Period 15) Ending Value 973.90
+2000-12-29, (MA Period 16) Ending Value 959.40
+2000-12-29, (MA Period 17) Ending Value 949.80
+2000-12-29, (MA Period 18) Ending Value 1011.90
+2000-12-29, (MA Period 19) Ending Value 1041.90
+2000-12-29, (MA Period 20) Ending Value 1078.00
+2000-12-29, (MA Period 21) Ending Value 1058.80
+2000-12-29, (MA Period 22) Ending Value 1061.50
+2000-12-29, (MA Period 23) Ending Value 1023.00
+2000-12-29, (MA Period 24) Ending Value 1020.10
+2000-12-29, (MA Period 25) Ending Value 1013.30
+2000-12-29, (MA Period 26) Ending Value 998.30
+2000-12-29, (MA Period 27) Ending Value 982.20
+2000-12-29, (MA Period 28) Ending Value 975.70
+2000-12-29, (MA Period 29) Ending Value 983.30
+2000-12-29, (MA Period 30) Ending Value 979.80
+</code></pre></div></div>
+
+<p>最终显示 SMA 周期设置为 20 会比较合理.</p>
+
+<blockquote>
+  <p>这个最优参数只是针对回测数据, 不能代表未来.</p>
+</blockquote>
+
+<h2 id="结语">结语</h2>
+
+<p>上面 <em>渐进式</em> 的示例显示了如何从一个只有骨架的脚本到一个能正常工作并且可以绘制图表及执行参数优化的交易系统是如何演变的.</p>
+
+<p>后续可以做更多事情来提高胜率:</p>
+
+<ul>
+  <li>自定义指标. 事实上, 创建指标很容易(甚至绘制它们也很容易)</li>
+  <li>Sizers. 对许多人来说, 资金管理是成功的关键</li>
+  <li>订单类型(限价, 止损, 止损限价) - limit, stop, stoplimit</li>
+  <li>其他</li>
+</ul>
+
+<p>backtrader 的文档对相关部分有详细介绍.</p>
+</div><section class="article__sharing d-print-none"></section><div class="d-print-none"><footer class="article__footer"><meta itemprop="dateModified" content="2022-07-09T05:34:04+08:00"><!-- start custom article footer snippet -->
+
+<!-- end custom article footer snippet -->
+<div class="article__subscribe"><div class="subscribe"><i class="fas fa-rss"></i> <a type="application/rss+xml" href="/feed.xml">订阅</a></div>
+</div><div class="article__license"></div></footer>
+<div class="article__section-navigator clearfix"><div class="previous"><span>上篇</span><a href="/2018/01/24/bitcoin-note.html">比特币科普</a></div><div class="next"><span>下篇</span><a href="/2022/08/13/shift-register.html">移位寄存器</a></div></div></div>
+
+</div>
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    $(function() {
+      var $this ,$scroll;
+      var $articleContent = $('.js-article-content');
+      var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+      var scroll = hasSidebar ? '.js-page-main' : 'html, body';
+      $scroll = $(scroll);
+
+      $articleContent.find('.highlight').each(function() {
+        $this = $(this);
+        $this.attr('data-lang', $this.find('code').attr('data-lang'));
+      });
+      $articleContent.find('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]').each(function() {
+        $this = $(this);
+        $this.append($('<a class="anchor d-print-none" aria-hidden="true"></a>').html('<i class="fas fa-anchor"></i>'));
+      });
+      $articleContent.on('click', '.anchor', function() {
+        $scroll.scrollToAnchor('#' + $(this).parent().attr('id'), 400);
+      });
+    });
+  });
+})();
+</script>
+</div><section class="page__comments d-print-none"></section></article><!-- start custom main bottom snippet -->
+
+<!-- end custom main bottom snippet -->
+</div>
+            </div></div></div><div class="page__footer d-print-none">
+<footer class="footer py-4 js-page-footer">
+    <div class="main"><div itemscope itemtype="http://schema.org/Person">
+        <meta itemprop="name" content="Zhigang Song"><meta itemprop="url" content="/"><meta itemprop="description" content="一个安静的程序员"><div class="footer__author-links"><div class="author-links">
+  <ul class="menu menu--nowrap menu--inline"><li title="在 Github 上关注我。">
+        <a class="button button--circle github-button" itemprop="sameAs" href="https://github.com/sidgwick" target="_blank">
+          <div class="icon"><svg fill="#000000" width="24px" height="24px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <path class="svgpath" data-index="path_0" fill="#272636" d="M0 525.2c0 223.6 143.3 413.7 343 483.5 26.9 6.8 22.8-12.4 22.8-25.4l0-88.7c-155.3 18.2-161.5-84.6-172-101.7-21.1-36-70.8-45.2-56-62.3 35.4-18.2 71.4 4.6 113.1 66.3 30.2 44.7 89.1 37.2 119 29.7 6.5-26.9 20.5-50.9 39.7-69.6C248.8 728.2 181.7 630 181.7 513.2c0-56.6 18.7-108.7 55.3-150.7-23.3-69.3 2.2-128.5 5.6-137.3 66.5-6 135.5 47.6 140.9 51.8 37.8-10.2 80.9-15.6 129.1-15.6 48.5 0 91.8 5.6 129.8 15.9 12.9-9.8 77-55.8 138.8-50.2 3.3 8.8 28.2 66.7 6.3 135 37.1 42.1 56 94.6 56 151.4 0 117-67.5 215.3-228.8 243.7 26.9 26.6 43.6 63.4 43.6 104.2l0 128.8c0.9 10.3 0 20.5 17.2 20.5C878.1 942.4 1024 750.9 1024 525.3c0-282.9-229.3-512-512-512C229.1 13.2 0 242.3 0 525.2L0 525.2z" />
+</svg>
+</div>
+        </a>
+      </li></ul>
+</div>
+</div>
+      </div><div class="site-info mt-2">
+        <div>© Zhigang Song 2015-2024,
+          Powered by <a title="Jekyll is a simple, blog-aware, static site generator." href="http://jekyllrb.com/">Jekyll</a> & <a
+          title="TeXt is a super customizable Jekyll theme." href="https://github.com/kitian616/jekyll-TeXt-theme">TeXt Theme</a>.
+        </div>
+        <div>
+            <a href="https://beian.miit.gov.cn/">豫ICP备19037616号</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+  </div></div>
+    </div><script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $body = $('body'), $window = $(window);
+    var $pageRoot = $('.js-page-root'), $pageMain = $('.js-page-main');
+    var activeCount = 0;
+    function modal(options) {
+      var $root = this, visible, onChange, hideWhenWindowScroll = false;
+      var scrollTop;
+      function setOptions(options) {
+        var _options = options || {};
+        visible = _options.initialVisible === undefined ? false : show;
+        onChange = _options.onChange;
+        hideWhenWindowScroll = _options.hideWhenWindowScroll;
+      }
+      function init() {
+        setState(visible);
+      }
+      function setState(isShow) {
+        if (isShow === visible) {
+          return;
+        }
+        visible = isShow;
+        if (visible) {
+          activeCount++;
+          scrollTop = $(window).scrollTop() || $pageMain.scrollTop();
+          $root.addClass('modal--show');
+          $pageMain.scrollTop(scrollTop);
+          activeCount === 1 && ($pageRoot.addClass('show-modal'), $body.addClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.on('scroll', hide);
+          $window.on('keyup', handleKeyup);
+        } else {
+          activeCount > 0 && activeCount--;
+          $root.removeClass('modal--show');
+          $window.scrollTop(scrollTop);
+          activeCount === 0 && ($pageRoot.removeClass('show-modal'), $body.removeClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.off('scroll', hide);
+          $window.off('keyup', handleKeyup);
+        }
+        onChange && onChange(visible);
+      }
+      function show() {
+        setState(true);
+      }
+      function hide() {
+        setState(false);
+      }
+      function handleKeyup(e) {
+        // Char Code: 27  ESC
+        if (e.which ===  27) {
+          hide();
+        }
+      }
+      setOptions(options);
+      init();
+      return {
+        show: show,
+        hide: hide,
+        $el: $root
+      };
+    }
+    $.fn.modal = modal;
+  });
+})();
+</script><div class="modal modal--overflow page__search-modal d-print-none js-page-search-modal"><script>
+(function () {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    // search panel
+    var search = (window.search || (window.search = {}));
+    var useDefaultSearchBox = window.useDefaultSearchBox === undefined ?
+      true : window.useDefaultSearchBox ;
+
+    var $searchModal = $('.js-page-search-modal');
+    var $searchToggle = $('.js-search-toggle');
+    var searchModal = $searchModal.modal({ onChange: handleModalChange, hideWhenWindowScroll: true });
+    var modalVisible = false;
+    search.searchModal = searchModal;
+
+    var $searchBox = null;
+    var $searchInput = null;
+    var $searchClear = null;
+
+    function getModalVisible() {
+      return modalVisible;
+    }
+    search.getModalVisible = getModalVisible;
+
+    function handleModalChange(visible) {
+      modalVisible = visible;
+      if (visible) {
+        search.onShow && search.onShow();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].focus();
+      } else {
+        search.onShow && search.onHide();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].blur();
+        setTimeout(function() {
+          useDefaultSearchBox && ($searchInput.val(''), $searchBox.removeClass('not-empty'));
+          search.clear && search.clear();
+          window.pageAsideAffix && window.pageAsideAffix.refresh();
+        }, 400);
+      }
+    }
+
+    $searchToggle.on('click', function() {
+      modalVisible ? searchModal.hide() : searchModal.show();
+    });
+    // Char Code: 83  S, 191 /
+    $(window).on('keyup', function(e) {
+      if (!modalVisible && !window.isFormElement(e.target || e.srcElement) && (e.which === 83 || e.which === 191)) {
+        modalVisible || searchModal.show();
+      }
+    });
+
+    if (useDefaultSearchBox) {
+      $searchBox = $('.js-search-box');
+      $searchInput = $searchBox.children('input');
+      $searchClear = $searchBox.children('.js-icon-clear');
+      search.getSearchInput = function() {
+        return $searchInput.get(0);
+      };
+      search.getVal = function() {
+        return $searchInput.val();
+      };
+      search.setVal = function(val) {
+        $searchInput.val(val);
+      };
+
+      $searchInput.on('focus', function() {
+        $(this).addClass('focus');
+      });
+      $searchInput.on('blur', function() {
+        $(this).removeClass('focus');
+      });
+      $searchInput.on('input', window.throttle(function() {
+        var val = $(this).val();
+        if (val === '' || typeof val !== 'string') {
+          search.clear && search.clear();
+        } else {
+          $searchBox.addClass('not-empty');
+          search.onInputNotEmpty && search.onInputNotEmpty(val);
+        }
+      }, 400));
+      $searchClear.on('click', function() {
+        $searchInput.val(''); $searchBox.removeClass('not-empty');
+        search.clear && search.clear();
+      });
+    }
+  });
+})();
+</script><div class="search search--dark">
+  <div class="main">
+    <div class="search__header">搜索</div>
+    <div class="search-bar">
+      <div class="search-box js-search-box">
+        <div class="search-box__icon-search"><i class="fas fa-search"></i></div>
+        <input type="text" />
+        <div class="search-box__icon-clear js-icon-clear">
+          <a><i class="fas fa-times"></i></a>
+        </div>
+      </div>
+      <button class="button button--theme-dark button--pill search__cancel js-search-toggle">
+        取消</button>
+    </div>
+    <div class="search-result js-search-result"></div>
+  </div>
+</div>
+<script>var SOURCES = window.TEXT_VARIABLES.sources;
+var PAHTS = window.TEXT_VARIABLES.paths;
+window.Lazyload.js([SOURCES.jquery, PAHTS.search_js], function() {
+  var search = (window.search || (window.search = {}));
+  var searchData = window.TEXT_SEARCH_DATA || {};
+
+  function memorize(f) {
+    var cache = {};
+    return function () {
+      var key = Array.prototype.join.call(arguments, ',');
+      if (key in cache) return cache[key];
+      else return cache[key] = f.apply(this, arguments);
+    };
+  }
+
+  /// search
+  function searchByQuery(query) {
+    var i, j, key, keys, cur, _title, result = {};
+    keys = Object.keys(searchData);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      for (j = 0; j < searchData[key].length; j++) {
+        cur = searchData[key][j], _title = cur.title;
+        if ((result[key] === undefined || result[key] && result[key].length < 4 )
+          && _title.toLowerCase().indexOf(query.toLowerCase()) >= 0) {
+          if (result[key] === undefined) {
+            result[key] = [];
+          }
+          result[key].push(cur);
+        }
+      }
+    }
+    return result;
+  }
+
+  var renderHeader = memorize(function(header) {
+    return $('<p class="search-result__header">' + header + '</p>');
+  });
+
+  var renderItem = function(index, title, url) {
+    return $('<li class="search-result__item" data-index="' + index + '"><a class="button" href="' + url + '">' + title + '</a></li>');
+  };
+
+  function render(data) {
+    if (!data) { return null; }
+    var $root = $('<ul></ul>'), i, j, key, keys, cur, itemIndex = 0;
+    keys = Object.keys(data);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      $root.append(renderHeader(key));
+      for (j = 0; j < data[key].length; j++) {
+        cur = data[key][j];
+        $root.append(renderItem(itemIndex++, cur.title, cur.url));
+      }
+    }
+    return $root;
+  }
+
+  // search box
+  var $result = $('.js-search-result'), $resultItems;
+  var lastActiveIndex, activeIndex;
+
+  function clear() {
+    $result.html(null);
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+  }
+  function onInputNotEmpty(val) {
+    $result.html(render(searchByQuery(val)));
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+    $resultItems.eq(0).addClass('active');
+  }
+
+  search.clear = clear;
+  search.onInputNotEmpty = onInputNotEmpty;
+
+  function updateResultItems() {
+    lastActiveIndex >= 0 && $resultItems.eq(lastActiveIndex).removeClass('active');
+    activeIndex >= 0 && $resultItems.eq(activeIndex).addClass('active');
+  }
+
+  function moveActiveIndex(direction) {
+    var itemsCount = $resultItems ? $resultItems.length : 0;
+    if (itemsCount > 1) {
+      lastActiveIndex = activeIndex;
+      if (direction === 'up') {
+        activeIndex = (activeIndex - 1 + itemsCount) % itemsCount;
+      } else if (direction === 'down') {
+        activeIndex = (activeIndex + 1 + itemsCount) % itemsCount;
+      }
+      updateResultItems();
+    }
+  }
+
+  // Char Code: 13  Enter, 37  ⬅, 38  ⬆, 39  ➡, 40  ⬇
+  $(window).on('keyup', function(e) {
+    var modalVisible = search.getModalVisible && search.getModalVisible();
+    if (modalVisible) {
+      if (e.which === 38) {
+        modalVisible && moveActiveIndex('up');
+      } else if (e.which === 40) {
+        modalVisible && moveActiveIndex('down');
+      } else if (e.which === 13) {
+        modalVisible && $resultItems && activeIndex >= 0 && $resultItems.eq(activeIndex).children('a')[0].click();
+      }
+    }
+  });
+
+  $result.on('mouseover', '.search-result__item > a', function() {
+    var itemIndex = $(this).parent().data('index');
+    itemIndex >= 0 && (lastActiveIndex = activeIndex, activeIndex = itemIndex, updateResultItems());
+  });
+});
+</script>
+</div></div>
+
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function scrollToAnchor(anchor, duration, callback) {
+      var $root = this;
+      $root.animate({ scrollTop: $(anchor).position().top }, duration, function() {
+        window.history.replaceState(null, '', window.location.href.split('#')[0] + anchor);
+        callback && callback();
+      });
+    }
+    $.fn.scrollToAnchor = scrollToAnchor;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function affix(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroll,
+        offsetBottom = 0, scrollTarget = window, scroll = window.document, disabled = false, isOverallScroller = true,
+        rootTop, rootLeft, rootHeight, scrollBottom, rootBottomTop,
+        hasInit = false, curState;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.offsetBottom && (offsetBottom = _options.offsetBottom);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroll && (scroll = _options.scroll);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $scrollTarget = $(scrollTarget);
+        isOverallScroller = window.isOverallScroller($scrollTarget[0]);
+        $scroll = $(scroll);
+      }
+      function preCalc() {
+        top();
+        rootHeight = $root.outerHeight();
+        rootTop = $root.offset().top + (isOverallScroller ? 0 :  $scrollTarget.scrollTop());
+        rootLeft = $root.offset().left;
+      }
+      function calc(needPreCalc) {
+        needPreCalc && preCalc();
+        scrollBottom = $scroll.outerHeight() - offsetBottom - rootHeight;
+        rootBottomTop = scrollBottom - rootTop;
+      }
+      function top() {
+        if (curState !== 'top') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: 0
+          });
+          curState = 'top';
+        }
+      }
+      function fixed() {
+        if (curState !== 'fixed') {
+          $root.addClass('fixed').css({
+            left: rootLeft + 'px',
+            top: 0
+          });
+          curState = 'fixed';
+        }
+      }
+      function bottom() {
+        if (curState !== 'bottom') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: rootBottomTop + 'px'
+          });
+          curState = 'bottom';
+        }
+      }
+      function setState() {
+        var scrollTop = $scrollTarget.scrollTop();
+        if (scrollTop >= rootTop && scrollTop <= scrollBottom) {
+          fixed();
+        } else if (scrollTop < rootTop) {
+          top();
+        } else {
+          bottom();
+        }
+      }
+      function init() {
+        if(!hasInit) {
+          var interval, timeout;
+          calc(true); setState();
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState();
+          });
+          $window.on('resize', function() {
+            disabled || (calc(true), setState());
+          });
+          hasInit = true;
+        }
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions,
+        refresh: function() {
+          calc(true, { animation: false }); setState();
+        }
+      };
+    }
+    $.fn.affix = affix;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function toc(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroller, $tocUl = $('<ul class="toc toc--ellipsis"></ul>'), $tocLi, $headings, $activeLast, $activeCur,
+        selectors = 'h1,h2,h3', container = 'body', scrollTarget = window, scroller = 'html, body', disabled = false,
+        headingsPos, scrolling = false, hasRendered = false, hasInit = false;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.selectors && (selectors = _options.selectors);
+        _options.container && (container = _options.container);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroller && (scroller = _options.scroller);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $headings = $(container).find(selectors).filter('[id]');
+        $scrollTarget = $(scrollTarget);
+        $scroller = $(scroller);
+      }
+      function calc() {
+        headingsPos = [];
+        $headings.each(function() {
+          headingsPos.push(Math.floor($(this).position().top));
+        });
+      }
+      function setState(element, disabled) {
+        var scrollTop = $scrollTarget.scrollTop(), i;
+        if (disabled || !headingsPos || headingsPos.length < 1) { return; }
+        if (element) {
+          $activeCur = element;
+        } else {
+          for (i = 0; i < headingsPos.length; i++) {
+            if (scrollTop >= headingsPos[i]) {
+              $activeCur = $tocLi.eq(i);
+            } else {
+              $activeCur || ($activeCur = $tocLi.eq(i));
+              break;
+            }
+          }
+        }
+        $activeLast && $activeLast.removeClass('active');
+        ($activeLast = $activeCur).addClass('active');
+      }
+      function render() {
+        if(!hasRendered) {
+          $root.append($tocUl);
+          $headings.each(function() {
+            var $this = $(this);
+            $tocUl.append($('<li></li>').addClass('toc-' + $this.prop('tagName').toLowerCase())
+              .append($('<a></a>').text($this.text()).attr('href', '#' + $this.prop('id'))));
+          });
+          $tocLi = $tocUl.children('li');
+          $tocUl.on('click', 'a', function(e) {
+            e.preventDefault();
+            var $this = $(this);
+            scrolling = true;
+            setState($this.parent());
+            $scroller.scrollToAnchor($this.attr('href'), 400, function() {
+              scrolling = false;
+            });
+          });
+        }
+        hasRendered = true;
+      }
+      function init() {
+        var interval, timeout;
+        if(!hasInit) {
+          render(); calc(); setState(null, scrolling);
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState(null, scrolling);
+          });
+          $window.on('resize', window.throttle(function() {
+            if (!disabled) {
+              render(); calc(); setState(null, scrolling);
+            }
+          }, 100));
+        }
+        hasInit = true;
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions
+      };
+    }
+    $.fn.toc = toc;
+  });
+})();
+/*(function () {
+
+})();*/
+</script><script>
+  /* toc must before affix, since affix need to konw toc' height. */(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  var TOC_SELECTOR = window.TEXT_VARIABLES.site.toc.selectors;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window);
+    var $articleContent = $('.js-article-content');
+    var $tocRoot = $('.js-toc-root'), $col2 = $('.js-col-aside');
+    var toc;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+    var hasToc = $articleContent.find(TOC_SELECTOR).length > 0;
+
+    function disabled() {
+      return $col2.css('display') === 'none' || !hasToc;
+    }
+
+    tocDisabled = disabled();
+
+    toc = $tocRoot.toc({
+      selectors: TOC_SELECTOR,
+      container: $articleContent,
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      tocDisabled = disabled();
+      toc && toc.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window), $pageFooter = $('.js-page-footer');
+    var $pageAside = $('.js-page-aside');
+    var affix;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+
+    affix = $pageAside.affix({
+      offsetBottom: $pageFooter.outerHeight(),
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      scroll: hasSidebar ? $('.js-page-main').children() : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      affix && affix.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+    window.pageAsideAffix = affix;
+  });
+})();
+</script><script type="text/x-mathjax-config">
+	var _config = { tex2jax: {
+		inlineMath: [['$','$'], ['\\(','\\)']]
+	}};MathJax.Hub.Config(_config);
+</script>
+<script type="text/javascript" src="https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
+<script>
+  window.Lazyload.js('https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js', function() {
+    mermaid.initialize({
+      startOnLoad: true
+    });
+    mermaid.init(undefined, '.language-mermaid');
+  });
+</script>
+
+    </div>
+    <script>(function () {
+  var $root = document.getElementsByClassName('root')[0];
+  if (window.hasEvent('touchstart')) {
+    $root.dataset.isTouch = true;
+    document.addEventListener('touchstart', function(){}, false);
+  }
+})();
+</script>
+  </body>
+</html>
+
