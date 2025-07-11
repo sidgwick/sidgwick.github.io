@@ -1,0 +1,1727 @@
+<!DOCTYPE html><html lang="zh-CN">
+  <head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"><title>Memcached的slabs(内存管理) - 挚爱荒原</title>
+
+<meta name="description" content="初始化内存管理部分.Memcached 是按照页面来管理它使用的内存的. 这样做的好处是可以减少每次都新申请内存的malloc调用, 但是不可避免的产生了内存空间浪费. 本篇分析 Memcached 的内存管理机制">
+<link rel="canonical" href="http://sidgwick.github.io/2015/11/05/Memcached-slabs.html"><link rel="alternate" type="application/rss+xml" title="挚爱荒原" href="/feed.xml"><link rel="stylesheet" href="/assets/css/main.css"><link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css" ><!-- start custom head snippets -->
+
+<!-- end custom head snippets -->
+<script>(function() {
+  window.isArray = function(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  };
+  window.isString = function(val) {
+    return typeof val === 'string';
+  };
+
+  window.hasEvent = function(event) {
+    return 'on'.concat(event) in window.document;
+  };
+
+  window.isOverallScroller = function(node) {
+    return node === document.documentElement || node === document.body || node === window;
+  };
+
+  window.isFormElement = function(node) {
+    var tagName = node.tagName;
+    return tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA';
+  };
+
+  window.pageLoad = (function () {
+    var loaded = false, cbs = [];
+    window.addEventListener('load', function () {
+      var i;
+      loaded = true;
+      if (cbs.length > 0) {
+        for (i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+      }
+    });
+    return {
+      then: function(cb) {
+        cb && (loaded ? cb() : (cbs.push(cb)));
+      }
+    };
+  })();
+})();
+(function() {
+  window.throttle = function(func, wait) {
+    var args, result, thisArg, timeoutId, lastCalled = 0;
+
+    function trailingCall() {
+      lastCalled = new Date;
+      timeoutId = null;
+      result = func.apply(thisArg, args);
+    }
+    return function() {
+      var now = new Date,
+        remaining = wait - (now - lastCalled);
+
+      args = arguments;
+      thisArg = this;
+
+      if (remaining <= 0) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        lastCalled = now;
+        result = func.apply(thisArg, args);
+      } else if (!timeoutId) {
+        timeoutId = setTimeout(trailingCall, remaining);
+      }
+      return result;
+    };
+  };
+})();
+(function() {
+  var Set = (function() {
+    var add = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (data[i] === item) {
+          return;
+        }
+      }
+      this.size ++;
+      data.push(item);
+      return data;
+    };
+
+    var Set = function(data) {
+      this.size = 0;
+      this._data = [];
+      var i;
+      if (data.length > 0) {
+        for (i = 0; i < data.length; i++) {
+          add.call(this, data[i]);
+        }
+      }
+    };
+    Set.prototype.add = add;
+    Set.prototype.get = function(index) { return this._data[index]; };
+    Set.prototype.has = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (this.get(i) === item) {
+          return true;
+        }
+      }
+      return false;
+    };
+    Set.prototype.is = function(map) {
+      if (map._data.length !== this._data.length) { return false; }
+      var i, j, flag, tData = this._data, mData = map._data;
+      for (i = 0; i < tData.length; i++) {
+        for (flag = false, j = 0; j < mData.length; j++) {
+          if (tData[i] === mData[j]) {
+            flag = true;
+            break;
+          }
+        }
+        if (!flag) { return false; }
+      }
+      return true;
+    };
+    Set.prototype.values = function() {
+      return this._data;
+    };
+    return Set;
+  })();
+
+  window.Lazyload = (function(doc) {
+    var queue = {js: [], css: []}, sources = {js: {}, css: {}}, context = this;
+    var createNode = function(name, attrs) {
+      var node = doc.createElement(name), attr;
+      for (attr in attrs) {
+        if (attrs.hasOwnProperty(attr)) {
+          node.setAttribute(attr, attrs[attr]);
+        }
+      }
+      return node;
+    };
+    var end = function(type, url) {
+      var s, q, qi, cbs, i, j, cur, val, flag;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        s[url] = true;
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (cur.urls.has(url)) {
+            qi = cur, val = qi.urls.values();
+            qi && (cbs = qi.callbacks);
+            for (flag = true, j = 0; j < val.length; j++) {
+              cur = val[j];
+              if (!s[cur]) {
+                flag = false;
+              }
+            }
+            if (flag && cbs && cbs.length > 0) {
+              for (j = 0; j < cbs.length; j++) {
+                cbs[j].call(context);
+              }
+              qi.load = true;
+            }
+          }
+        }
+      }
+    };
+    var load = function(type, urls, callback) {
+      var s, q, qi, node, i, cur,
+        _urls = typeof urls === 'string' ? new Set([urls]) : new Set(urls), val, url;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (_urls.is(cur.urls)) {
+            qi = cur;
+            break;
+          }
+        }
+        val = _urls.values();
+        if (qi) {
+          callback && (qi.load || qi.callbacks.push(callback));
+          callback && (qi.load && callback());
+        } else {
+          q.push({
+            urls: _urls,
+            callbacks: callback ? [callback] : [],
+            load: false
+          });
+          for (i = 0; i < val.length; i++) {
+            node = null, url = val[i];
+            if (s[url] === undefined) {
+              (type === 'js' ) && (node = createNode('script', { src: url }));
+              (type === 'css') && (node = createNode('link', { rel: 'stylesheet', href: url }));
+              if (node) {
+                node.onload = (function(type, url) {
+                  return function() {
+                    end(type, url);
+                  };
+                })(type, url);
+                (doc.head || doc.body).appendChild(node);
+                s[url] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+    return {
+      js: function(url, callback) {
+        load('js', url, callback);
+      },
+      css: function(url, callback) {
+        load('css', url, callback);
+      }
+    };
+  })(this.document);
+})();
+</script><script>
+  (function() {
+    var TEXT_VARIABLES = {
+      version: '2.2.6',
+      sources: {
+        font_awesome: 'https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css',
+        jquery: 'https://cdn.bootcss.com/jquery/3.1.1/jquery.min.js',
+        leancloud_js_sdk: '//cdn.jsdelivr.net/npm/leancloud-storage@3.13.2/dist/av-min.js',
+        chart: 'https://cdn.bootcss.com/Chart.js/2.7.2/Chart.bundle.min.js',
+        gitalk: {
+          js: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.js',
+          css: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.css'
+        },
+        valine: 'https://unpkg.com/valine/dist/Valine.min.js',
+        mathjax: 'https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML',
+        mermaid: 'https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js'
+      },
+      site: {
+        toc: {
+          selectors: 'h1,h2,h3'
+        }
+      },
+      paths: {
+        search_js: '/assets/search.js'
+      }
+    };
+    window.TEXT_VARIABLES = TEXT_VARIABLES;
+  })();
+</script>
+</head>
+  <body>
+    <div class="root" data-is-touch="false">
+      <div class="layout--page js-page-root"><div class="page__main js-page-main page__viewport has-aside cell cell--auto">
+
+      <div class="page__main-inner"><div class="page__header d-print-none"><header class="header"><div class="main">
+      <div class="header__title">
+        <div class="header__brand"><svg version="1.0" width="2848.000000pt" height="2848.000000pt" viewBox="0 0 2848.000000 2848.000000" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <defs></defs>
+  <g transform="translate(0.000000,2848.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
+    <path d="M10593 18855 c-7 -8 -13 -19 -13 -25 0 -5 -4 -10 -10 -10 -5 0 -10
+-6 -10 -14 0 -8 -3 -16 -7 -18 -5 -1 -42 -55 -83 -118 -41 -63 -77 -117 -80
+-120 -13 -13 -181 -269 -201 -307 -7 -13 -16 -23 -21 -23 -4 0 -8 -7 -8 -15 0
+-8 -4 -15 -10 -15 -5 0 -10 -6 -10 -13 0 -8 -9 -22 -20 -32 -11 -10 -20 -24
+-20 -32 0 -7 -4 -13 -9 -13 -5 0 -13 -9 -16 -20 -3 -11 -12 -26 -18 -32 -12
+-13 -68 -95 -77 -113 -13 -26 -246 -370 -252 -373 -5 -2 -8 -10 -8 -18 0 -8
+-4 -14 -10 -14 -5 0 -10 -7 -10 -15 0 -8 -3 -15 -8 -15 -4 0 -12 -9 -17 -19
+-12 -23 -225 -347 -240 -364 -6 -7 -42 -60 -80 -119 -39 -59 -75 -108 -81
+-108 -6 0 -29 8 -50 17 -22 9 -48 18 -58 20 -11 2 -24 7 -30 12 -9 7 -171 74
+-186 77 -3 0 -14 5 -25 9 -49 21 -811 327 -820 329 -5 2 -19 7 -30 11 -123 52
+-267 109 -295 118 -19 6 -37 14 -40 17 -3 3 -9 6 -15 7 -5 1 -32 10 -58 20
+-45 17 -49 17 -58 1 -5 -9 -16 -24 -24 -32 -8 -8 -15 -18 -15 -23 0 -4 -14
+-23 -31 -40 -16 -18 -26 -33 -22 -33 4 0 3 -4 -2 -8 -10 -7 -69 -81 -110 -138
+-20 -28 -98 -131 -112 -149 -5 -5 -19 -26 -33 -45 -13 -19 -27 -37 -30 -40 -3
+-3 -43 -57 -90 -120 -47 -63 -92 -120 -100 -127 -8 -7 -10 -13 -5 -13 6 0 6
+-3 0 -8 -6 -4 -29 -32 -53 -62 -23 -30 -45 -59 -50 -65 -4 -5 -18 -26 -32 -45
+-13 -19 -27 -37 -30 -40 -3 -3 -25 -32 -50 -65 -24 -33 -48 -64 -52 -70 -5 -5
+-47 -62 -94 -125 -80 -109 -102 -138 -139 -185 -8 -11 -65 -87 -127 -170 -62
+-82 -116 -154 -120 -160 -5 -5 -38 -49 -73 -97 -35 -48 -70 -95 -79 -104 -9
+-8 -16 -19 -16 -24 0 -5 -7 -16 -15 -24 -9 -8 -43 -53 -77 -98 -34 -46 -65
+-84 -70 -86 -4 -2 -8 -8 -8 -13 0 -10 -5 -17 -45 -63 -14 -16 -25 -32 -25 -35
+0 -3 -11 -19 -25 -34 -14 -15 -23 -27 -20 -27 2 0 -4 -10 -14 -22 -17 -20
+-159 -207 -216 -284 -11 -15 -25 -32 -30 -38 -6 -6 -28 -37 -49 -68 -22 -32
+-43 -58 -47 -58 -4 0 -10 -8 -14 -19 -3 -10 -16 -30 -28 -43 -12 -13 -31 -37
+-41 -53 -10 -17 -25 -37 -33 -45 -8 -8 -35 -44 -61 -80 -25 -36 -49 -67 -52
+-70 -3 -3 -37 -48 -75 -100 -38 -52 -72 -97 -75 -100 -3 -3 -44 -57 -90 -120
+-91 -123 -107 -144 -128 -166 -7 -8 -11 -14 -8 -14 3 0 -3 -10 -13 -22 -20
+-23 -183 -238 -211 -278 -8 -12 -23 -31 -32 -43 -10 -12 -56 -74 -103 -137
+-87 -118 -113 -152 -130 -173 -6 -6 -35 -46 -65 -87 -59 -80 -78 -105 -98
+-125 -6 -8 -12 -16 -12 -19 0 -5 -87 -123 -100 -136 -3 -3 -97 -129 -210 -280
+-113 -151 -213 -284 -222 -294 -10 -11 -18 -24 -18 -29 0 -7 -51 -3 -90 8 -8
+2 -31 6 -50 9 -19 3 -46 8 -60 11 -24 5 -38 8 -120 22 -19 3 -44 8 -55 10 -11
+2 -33 6 -50 9 -16 3 -88 16 -160 30 -126 24 -175 33 -219 38 -11 2 -28 6 -36
+9 -8 3 -37 9 -65 13 -27 4 -57 9 -65 11 -21 4 -58 11 -105 19 -22 3 -42 8 -44
+10 -2 2 -13 -6 -23 -19 -11 -12 -32 -36 -46 -52 -15 -17 -56 -63 -92 -104 -36
+-41 -76 -87 -90 -101 -14 -15 -50 -56 -80 -91 -30 -35 -69 -79 -87 -99 -18
+-19 -43 -47 -55 -61 -13 -15 -50 -57 -84 -95 -77 -87 -141 -160 -224 -254 -36
+-41 -76 -85 -88 -99 -13 -13 -37 -42 -53 -64 -16 -22 -29 -37 -29 -33 0 4 -12
+-7 -27 -26 -16 -18 -32 -38 -38 -44 -5 -6 -35 -39 -65 -74 -30 -34 -68 -77
+-85 -95 -16 -18 -43 -49 -60 -69 -16 -20 -46 -53 -65 -74 -19 -21 -62 -69 -95
+-106 -33 -38 -73 -84 -90 -102 -16 -17 -49 -54 -72 -80 -22 -27 -55 -65 -73
+-84 -18 -19 -51 -57 -73 -83 -50 -58 -63 -73 -144 -163 -34 -38 -70 -78 -80
+-90 -51 -60 -142 -162 -170 -190 -18 -18 -33 -35 -33 -39 0 -3 -10 -16 -22
+-29 -20 -20 -101 -110 -155 -173 -10 -11 -47 -53 -83 -93 -36 -40 -69 -78 -75
+-85 -5 -6 -25 -28 -44 -48 l-34 -36 69 4 c38 3 114 7 169 10 55 2 132 7 170
+10 39 3 104 7 147 9 42 2 81 6 86 10 6 3 13 2 17 -4 4 -6 12 -7 18 -3 7 4 32
+8 57 9 25 1 88 5 140 8 52 4 133 9 180 11 47 3 114 7 150 10 36 3 106 7 155 9
+50 2 126 7 170 10 174 13 340 23 477 30 36 2 71 7 77 10 6 4 11 2 11 -4 0 -6
+5 -8 11 -4 12 7 59 11 201 18 47 2 91 7 97 10 6 4 11 2 11 -4 0 -6 5 -8 13 -3
+6 4 41 8 77 10 36 1 94 4 130 7 36 3 112 8 170 11 58 3 128 7 155 9 28 3 97 7
+155 11 58 3 139 8 180 11 41 2 113 6 160 9 47 2 85 5 85 5 0 2 186 13 242 14
+29 0 53 5 53 9 0 4 8 3 19 -2 10 -6 21 -7 25 -3 4 3 28 8 54 9 57 2 194 10
+317 18 50 3 119 7 155 9 36 2 108 7 160 11 52 3 127 8 165 10 39 3 115 7 170
+11 55 3 127 7 160 9 33 2 60 4 60 5 0 1 12 3 28 4 15 1 27 -3 27 -9 0 -7 3 -7
+8 0 4 6 19 11 35 12 92 3 82 -6 86 81 1 42 4 97 6 122 10 124 16 188 21 215 3
+17 7 44 9 60 4 30 14 94 21 130 2 10 6 37 9 60 3 22 8 48 11 57 6 20 13 52 20
+97 5 32 9 49 18 89 42 180 59 250 76 312 12 41 23 86 26 100 3 14 11 45 19 70
+41 135 59 197 62 211 1 9 8 29 14 45 7 16 12 32 11 35 -1 4 13 46 29 95 17 49
+32 99 33 111 2 13 9 29 16 38 7 8 10 15 7 15 -3 0 15 57 40 128 25 70 46 132
+47 137 2 6 6 19 10 30 5 11 12 34 18 50 5 17 14 39 18 50 18 46 35 91 36 98 1
+4 3 9 4 12 1 3 3 8 5 13 1 4 5 14 8 22 4 8 19 49 35 90 l28 75 649 2 c358 2
+731 3 830 3 l180 0 78 158 c42 87 77 163 77 170 0 7 5 12 12 12 6 0 9 3 5 6
+-3 4 4 25 15 48 12 22 23 43 23 46 1 6 30 68 98 210 27 58 50 110 52 115 1 6
+16 42 34 80 19 39 45 95 58 125 14 30 44 96 67 145 23 50 43 93 44 97 1 5 16
+38 33 75 43 93 72 157 74 163 3 8 45 99 101 219 30 62 54 120 54 127 0 8 5 14
+10 14 6 0 10 5 10 11 0 6 23 58 50 115 28 57 50 108 50 114 0 5 4 10 10 10 5
+0 9 3 8 8 -2 11 10 38 127 277 59 121 112 223 117 226 5 3 9 9 8 13 -4 13 22
+66 32 66 5 0 7 4 3 9 -3 5 3 17 12 27 10 10 17 19 16 21 -3 4 30 76 38 83 3 3
+19 32 36 65 59 116 78 150 91 163 6 7 12 20 12 28 0 8 5 14 10 14 6 0 10 5 10
+10 0 13 132 234 142 238 4 2 8 7 8 12 0 12 71 118 150 225 36 50 74 101 83
+115 9 13 17 21 17 16 0 -4 17 14 39 41 101 126 258 236 358 250 36 5 44 10 50
+32 3 14 10 32 16 39 5 6 7 12 4 12 -3 0 2 24 13 54 10 30 16 57 13 60 -4 3 0
+6 7 6 7 0 11 3 7 6 -3 4 0 19 9 35 8 16 11 29 7 29 -4 0 -2 5 5 12 7 7 12 21
+12 32 0 12 7 30 15 40 8 11 15 26 15 33 0 7 11 35 24 62 13 27 27 62 30 77 4
+15 16 40 27 55 10 15 19 32 19 38 0 12 71 152 81 161 4 3 15 21 26 40 31 58
+75 125 84 128 5 2 9 10 9 18 0 8 7 17 15 20 8 4 15 10 15 14 0 24 148 171 220
+219 54 37 141 81 170 86 8 2 15 4 15 5 0 11 185 17 230 7 17 -4 46 -10 65 -13
+19 -3 38 -8 42 -11 5 -2 16 -6 27 -8 34 -6 307 -101 325 -113 6 -3 16 -7 21
+-8 6 -1 33 -12 60 -24 28 -12 68 -30 90 -40 103 -45 122 -53 149 -66 16 -8 35
+-14 43 -14 7 0 13 -4 13 -10 0 -5 4 -10 10 -10 20 0 542 -256 780 -382 47 -25
+128 -67 180 -94 52 -27 97 -51 100 -54 3 -3 28 -17 55 -32 82 -42 208 -110
+240 -129 17 -10 46 -26 65 -36 19 -9 62 -33 95 -52 33 -19 61 -33 61 -30 1 2
+10 -3 20 -11 11 -8 28 -20 39 -26 11 -6 43 -24 70 -39 28 -16 70 -39 95 -53
+24 -13 57 -33 72 -44 15 -10 28 -16 28 -11 0 4 4 4 8 -2 4 -5 16 -15 27 -21
+29 -16 104 -58 150 -84 22 -13 60 -34 84 -48 25 -14 68 -38 95 -55 28 -16 71
+-41 96 -55 25 -13 52 -31 61 -38 8 -8 19 -14 23 -14 4 0 84 -45 177 -100 93
+-55 174 -100 179 -100 6 0 10 -4 10 -9 0 -5 8 -11 18 -15 9 -3 24 -10 32 -16
+14 -9 186 -111 255 -150 71 -41 110 -64 115 -70 3 -3 25 -16 50 -29 25 -13 52
+-29 60 -36 8 -7 22 -15 30 -19 8 -4 24 -12 35 -19 11 -7 88 -52 170 -102 83
+-49 152 -93 153 -97 2 -5 8 -8 13 -8 12 0 262 -152 271 -165 4 -5 8 -6 8 -2 0
+4 6 3 13 -3 6 -6 82 -53 167 -105 85 -52 164 -101 175 -110 10 -8 23 -15 28
+-15 4 0 35 -18 67 -40 32 -22 64 -40 69 -40 6 0 11 -4 11 -10 0 -5 5 -10 11
+-10 6 0 25 -11 43 -25 18 -14 38 -25 44 -25 6 0 16 -9 22 -20 6 -11 7 -20 2
+-20 -6 0 -12 -8 -15 -17 -4 -10 -26 -45 -50 -78 -24 -33 -79 -112 -122 -175
+-75 -111 -104 -152 -125 -177 -5 -7 -10 -17 -10 -23 0 -5 -3 -10 -8 -10 -4 0
+-12 -9 -17 -20 -13 -26 -176 -264 -186 -270 -4 -3 -15 -19 -25 -37 -11 -17
+-37 -57 -59 -90 -22 -32 -81 -116 -130 -188 -49 -71 -93 -131 -97 -133 -4 -2
+-8 -8 -8 -13 0 -5 -12 -27 -27 -48 -16 -21 -35 -49 -43 -61 -8 -12 -30 -43
+-48 -69 -32 -45 -300 -436 -384 -559 -24 -35 -54 -77 -66 -93 -13 -16 -20 -29
+-15 -29 4 0 3 -4 -4 -8 -11 -7 -61 -78 -149 -212 -20 -30 -41 -56 -45 -58 -5
+-2 -9 -9 -9 -16 0 -7 -9 -21 -20 -31 -11 -10 -20 -24 -20 -31 0 -7 -3 -14 -8
+-16 -4 -2 -25 -30 -47 -63 -21 -33 -41 -62 -44 -65 -3 -3 -30 -41 -60 -85 -73
+-107 -168 -246 -222 -323 -24 -35 -48 -71 -54 -80 -5 -9 -12 -19 -15 -22 -3
+-3 -14 -18 -26 -35 -60 -87 -151 -220 -164 -240 -24 -35 -81 -119 -182 -265
+-51 -75 -124 -182 -163 -239 -38 -57 -75 -109 -82 -116 -7 -7 -9 -15 -6 -19 4
+-3 2 -6 -4 -6 -5 0 -25 -24 -43 -52 -19 -29 -38 -54 -42 -56 -4 -2 -8 -8 -8
+-13 0 -9 -38 -68 -51 -79 -3 -3 -18 -23 -32 -45 -14 -22 -52 -78 -84 -125 -32
+-47 -87 -128 -123 -180 -35 -52 -67 -97 -70 -100 -9 -8 -84 -119 -95 -141 -5
+-10 -13 -19 -17 -19 -5 0 -8 -7 -8 -15 0 -8 -4 -15 -9 -15 -5 0 -12 -8 -15
+-18 -4 -10 -14 -27 -24 -38 -9 -11 -23 -29 -30 -40 -42 -64 -53 -81 -67 -100
+-43 -58 -143 -209 -140 -212 3 -3 276 129 285 138 3 3 10 6 17 7 7 2 58 25
+115 52 130 62 189 89 308 141 52 23 101 46 108 52 6 6 12 8 12 5 0 -3 50 16
+110 43 61 26 110 46 110 43 0 -2 12 5 26 16 14 11 32 17 40 14 8 -3 14 1 14 8
+0 7 3 10 6 7 3 -4 24 2 47 12 68 29 117 49 120 48 1 -1 13 5 27 12 14 8 30 15
+35 16 6 1 55 21 110 43 55 22 103 41 106 41 4 0 24 8 45 17 22 9 48 18 58 20
+11 2 24 7 30 12 9 7 82 34 96 36 5 0 60 21 95 35 23 10 225 81 240 84 6 2 17
+6 25 9 8 3 87 29 175 57 88 29 185 60 216 70 31 11 68 21 83 24 14 2 31 8 38
+13 7 4 18 8 23 9 12 2 127 34 247 68 47 13 89 22 92 18 3 -3 6 0 6 7 0 7 4 9
+10 6 5 -3 18 -2 27 4 10 5 32 11 48 14 17 3 37 8 45 11 8 3 26 8 40 10 14 3
+63 14 110 26 47 12 137 32 200 46 63 14 138 35 165 48 48 22 125 87 125 106 0
+5 6 15 13 22 11 10 47 101 52 128 1 3 5 23 9 45 16 80 17 104 20 318 2 120 -1
+220 -6 223 -4 3 -6 10 -3 15 4 5 8 82 10 172 2 89 6 173 9 187 19 105 30 144
+61 207 34 69 111 153 140 153 7 0 18 6 24 14 10 12 88 32 164 42 41 5 100 14
+124 18 11 3 36 7 54 10 19 3 44 8 55 10 12 2 37 7 56 10 19 3 72 14 119 25 47
+11 98 23 114 26 41 8 60 13 60 15 0 1 9 3 20 5 11 2 31 6 45 10 14 3 36 8 50
+11 14 2 36 7 50 11 14 3 30 7 35 9 6 1 46 11 91 23 45 11 92 23 105 25 13 3
+25 5 27 7 2 2 1 1 57 14 22 5 42 9 45 10 17 5 59 16 85 20 17 4 35 7 40 9 16
+4 89 19 105 21 8 1 26 5 40 9 14 3 41 8 60 10 19 3 35 5 35 6 0 1 36 4 80 6
+75 5 82 7 113 39 17 18 32 37 32 42 0 4 7 21 15 36 8 15 31 78 51 140 33 104
+43 137 49 177 1 8 5 22 8 30 13 36 66 269 72 315 1 11 5 27 8 35 6 16 62 291
+83 410 4 19 9 44 11 55 7 36 12 59 17 85 2 14 7 36 10 50 3 14 8 36 10 50 3
+14 7 35 10 46 2 12 7 39 10 60 4 22 8 46 11 54 2 8 6 26 9 40 15 88 17 100 51
+260 14 69 28 134 30 145 3 11 7 31 10 45 3 14 7 39 9 57 3 18 7 36 9 40 3 4 8
+25 11 46 7 45 25 125 33 147 3 8 7 29 9 45 3 17 11 53 18 80 8 28 20 77 26
+110 7 33 16 65 21 71 5 6 7 13 4 16 -3 2 9 54 26 114 17 60 32 116 34 124 20
+88 111 357 127 378 6 6 7 12 3 12 -4 0 0 11 9 25 9 14 14 25 11 25 -3 0 13 35
+36 78 23 42 48 88 55 102 20 38 88 110 120 127 42 22 94 23 135 2 42 -21 42
+-21 124 -114 113 -128 283 -311 393 -424 124 -129 362 -369 362 -367 0 1 58
+-55 129 -124 71 -69 177 -170 236 -225 114 -107 124 -116 231 -213 38 -35 87
+-80 109 -100 22 -20 76 -68 120 -107 44 -38 91 -81 105 -95 14 -14 39 -35 55
+-48 17 -13 46 -38 65 -55 19 -18 69 -61 110 -97 41 -36 80 -70 86 -76 6 -5 31
+-26 54 -45 23 -18 52 -43 64 -55 11 -11 46 -40 76 -65 30 -24 69 -57 86 -74
+18 -16 44 -39 58 -49 15 -11 37 -29 50 -40 21 -19 89 -76 140 -118 51 -41 171
+-143 176 -148 3 -4 14 -13 26 -21 28 -19 113 -89 141 -116 13 -12 23 -19 23
+-15 0 4 4 2 8 -3 4 -6 32 -30 62 -55 30 -25 58 -49 62 -55 4 -5 8 -6 8 -2 0 4
+18 -10 41 -33 22 -22 44 -40 47 -40 4 0 30 -20 57 -45 28 -24 53 -45 56 -45 3
+0 17 -10 31 -22 13 -13 37 -32 52 -43 15 -11 41 -31 56 -45 15 -14 40 -34 55
+-44 14 -11 34 -27 44 -35 10 -9 33 -27 51 -41 55 -42 95 -74 102 -85 4 -5 8
+-7 8 -3 0 4 11 -3 24 -15 26 -24 38 -33 161 -129 44 -35 82 -65 85 -68 3 -3
+43 -34 90 -70 99 -76 98 -75 172 -134 32 -25 62 -46 67 -46 5 0 11 -4 13 -8 3
+-7 61 -54 192 -155 16 -12 43 -34 61 -49 18 -16 37 -28 43 -28 6 0 12 -4 14
+-9 2 -4 41 -37 88 -71 47 -35 87 -66 90 -70 3 -3 50 -39 105 -80 114 -86 126
+-95 170 -132 18 -16 37 -28 43 -28 6 0 12 -4 14 -8 2 -4 68 -57 148 -117 80
+-61 147 -112 150 -115 3 -3 68 -52 145 -110 77 -57 142 -107 145 -110 3 -3 79
+-61 170 -129 91 -68 179 -135 195 -148 17 -13 35 -27 40 -31 11 -8 215 -162
+230 -174 6 -4 35 -27 65 -51 30 -23 80 -61 110 -84 30 -22 66 -50 79 -62 13
+-11 27 -21 30 -21 3 0 18 -10 31 -22 14 -13 82 -66 150 -118 69 -52 132 -100
+140 -107 44 -35 141 -111 170 -133 65 -49 165 -128 246 -195 13 -11 36 -29 50
+-40 14 -11 38 -30 52 -42 15 -12 86 -70 157 -128 72 -59 144 -119 161 -134 17
+-15 55 -47 84 -72 28 -24 62 -53 74 -64 12 -11 58 -51 101 -90 43 -38 106 -97
+140 -130 93 -91 103 -96 49 -24 -27 37 -55 75 -62 85 -29 44 -112 160 -122
+171 -5 7 -10 16 -10 22 0 5 -4 11 -8 13 -4 2 -28 32 -52 68 -64 93 -207 293
+-219 307 -6 7 -11 17 -11 22 0 6 -6 14 -14 18 -7 4 -18 18 -25 30 -11 22 -110
+163 -136 195 -7 9 -22 29 -32 45 -17 27 -95 138 -111 158 -4 6 -23 33 -42 60
+-19 28 -37 52 -42 53 -4 2 -8 8 -8 14 0 8 -44 73 -60 88 -3 3 -26 35 -50 72
+-25 38 -49 68 -53 68 -5 0 -5 5 -2 10 3 6 1 10 -4 10 -6 0 -11 5 -11 10 0 6
+-11 23 -24 38 -14 15 -25 31 -25 36 1 5 -3 12 -8 15 -8 5 -58 74 -155 213 -18
+26 -37 47 -41 48 -5 0 -5 5 -2 10 3 6 -1 13 -9 16 -9 3 -16 11 -16 18 0 6 -18
+34 -40 61 -22 28 -40 55 -40 62 0 6 -4 13 -9 15 -8 3 -145 190 -167 228 -12
+22 -42 64 -66 92 -10 12 -18 25 -18 30 0 4 -8 16 -17 27 -10 10 -34 42 -53 71
+-19 29 -43 60 -52 71 -9 10 -24 32 -33 48 -8 17 -20 31 -25 31 -6 0 -10 4 -10
+10 0 5 -21 40 -47 77 -67 96 -280 396 -290 408 -4 6 -33 46 -63 90 -30 44 -58
+81 -62 83 -4 2 -8 10 -8 17 0 7 -4 15 -8 17 -5 2 -36 44 -71 93 -63 91 -85
+123 -291 414 -63 89 -119 170 -125 179 -5 9 -12 19 -15 22 -3 3 -17 21 -30 40
+-13 19 -27 37 -30 40 -8 8 -70 100 -70 105 0 3 -12 19 -27 36 -16 17 -26 32
+-23 32 2 1 -3 11 -13 22 -14 18 -75 102 -137 190 -11 17 -38 53 -58 82 -20 28
+-43 59 -50 70 -7 10 -48 69 -92 131 -44 62 -80 117 -80 122 0 6 -4 10 -8 10
+-5 0 -27 28 -50 63 -24 34 -68 98 -99 142 -31 44 -68 96 -82 116 -14 20 -63
+89 -108 153 -46 63 -83 120 -83 126 0 25 -7 16 -223 -274 -12 -16 -34 -45 -50
+-65 -15 -20 -36 -47 -46 -61 -10 -14 -49 -66 -87 -117 -38 -50 -78 -104 -89
+-119 -11 -16 -28 -36 -37 -46 -10 -10 -18 -20 -18 -23 0 -4 -210 -287 -238
+-320 -4 -5 -19 -26 -32 -45 -14 -19 -27 -37 -30 -40 -3 -3 -39 -49 -79 -102
+-40 -54 -76 -98 -80 -98 -3 0 -19 23 -36 50 -16 27 -33 50 -37 50 -5 0 -8 5
+-8 10 0 10 -38 69 -51 80 -5 4 -38 53 -74 109 -5 8 -15 21 -22 28 -7 7 -22 31
+-34 53 -13 22 -26 40 -31 40 -4 0 -8 6 -8 14 0 8 -4 16 -8 18 -5 2 -50 64
+-100 138 -51 73 -101 144 -112 157 -11 13 -17 23 -14 23 6 0 -48 74 -58 78 -5
+2 -8 10 -8 17 0 8 -6 20 -13 27 -7 7 -44 58 -82 113 -38 55 -73 102 -77 103
+-4 2 -8 10 -8 18 0 8 -4 14 -10 14 -5 0 -10 7 -10 15 0 8 -4 15 -10 15 -5 0
+-10 5 -10 11 0 6 -6 16 -12 24 -15 15 -124 173 -151 217 -9 16 -25 38 -35 49
+-11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 6 0 6 3 0 8 -17
+11 -175 239 -175 251 0 6 -3 11 -8 11 -4 0 -22 21 -39 48 -30 44 -139 202
+-270 390 -32 46 -62 91 -68 100 -10 16 -20 29 -42 56 -7 8 -13 19 -13 23 0 4
+-12 21 -26 38 -14 16 -35 45 -47 65 -12 19 -27 41 -34 48 -7 7 -13 20 -13 28
+0 8 -4 14 -8 14 -4 0 -32 36 -61 80 -30 44 -58 80 -64 80 -6 0 -8 3 -4 6 6 6
+-81 136 -95 142 -5 2 -8 8 -8 12 0 11 -162 244 -172 248 -5 2 -8 8 -8 13 0 9
+-37 67 -51 79 -3 3 -34 48 -70 100 -35 52 -67 97 -71 98 -5 2 -8 8 -8 13 0 6
+-8 19 -18 30 -11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 7 0
+7 3 0 8 -15 11 -115 151 -115 161 0 5 -3 11 -7 13 -5 2 -33 39 -63 83 -30 44
+-58 85 -62 90 -26 32 -88 127 -88 135 0 6 -3 10 -7 10 -5 0 -30 34 -57 74
+l-49 74 -26 -16 c-26 -15 -72 -45 -259 -166 -56 -36 -107 -66 -112 -66 -4 0
+-10 -4 -12 -8 -1 -4 -32 -26 -68 -47 -36 -21 -66 -43 -68 -47 -2 -4 -9 -8 -16
+-8 -6 0 -21 -7 -31 -15 -35 -27 -158 -105 -166 -105 -4 0 -14 -6 -21 -12 -22
+-21 -127 -88 -138 -88 -5 0 -10 -4 -10 -9 0 -5 -13 -14 -30 -21 -16 -7 -30
+-16 -30 -21 0 -5 -6 -9 -14 -9 -8 0 -21 -6 -28 -13 -7 -7 -38 -28 -68 -47 -30
+-19 -58 -39 -62 -45 -4 -5 -8 -6 -8 -2 0 4 -15 -3 -33 -17 -19 -15 -39 -26
+-45 -26 -7 0 -12 -4 -12 -8 0 -5 -18 -17 -40 -28 -22 -10 -40 -22 -40 -26 0
+-5 -7 -8 -15 -8 -8 0 -15 -4 -15 -9 0 -5 -16 -17 -36 -27 -20 -11 -44 -23 -55
+-29 -10 -5 -19 -13 -19 -17 0 -5 -7 -8 -15 -8 -8 0 -15 -4 -15 -10 0 -5 -4
+-10 -10 -10 -5 0 -39 -19 -74 -42 -89 -59 -417 -268 -481 -308 -14 -8 -113
+-71 -220 -140 -107 -69 -205 -130 -218 -137 -12 -7 -29 -17 -37 -23 -8 -6 -51
+-33 -95 -62 -44 -28 -92 -59 -107 -69 -15 -11 -32 -19 -38 -19 -5 0 -10 -5
+-10 -10 0 -6 -12 -15 -26 -20 -14 -6 -47 -25 -72 -43 -51 -34 -78 -52 -102
+-64 -8 -4 -19 -11 -25 -15 -5 -5 -39 -27 -75 -50 -36 -23 -94 -60 -130 -83
+-36 -23 -108 -68 -160 -100 -52 -32 -97 -62 -100 -65 -3 -4 -30 -22 -60 -39
+-30 -17 -64 -38 -76 -46 -18 -14 -24 -12 -65 17 -24 18 -45 36 -47 40 -2 5 -8
+8 -13 8 -5 0 -33 18 -62 40 -65 50 -55 43 -162 120 -49 35 -94 68 -100 72 -9
+8 -90 67 -140 102 -92 66 -151 111 -153 118 -2 4 -8 8 -13 8 -8 0 -111 72
+-129 90 -3 3 -12 10 -22 15 -22 14 -302 217 -308 225 -3 3 -18 14 -35 24 -16
+11 -34 23 -40 28 -61 49 -116 88 -124 88 -5 0 -11 4 -13 8 -1 4 -59 48 -128
+97 -69 49 -127 92 -130 95 -3 4 -26 21 -52 38 -25 18 -54 39 -62 48 -9 8 -16
+12 -16 7 0 -4 -4 -3 -8 3 -4 6 -50 42 -102 79 -52 38 -99 72 -105 77 -5 4 -46
+34 -90 65 -44 32 -81 61 -83 65 -2 4 -8 8 -14 8 -6 0 -24 11 -42 25 -45 36
+-43 35 -133 100 -46 32 -83 62 -83 67 0 4 -5 8 -11 8 -9 0 -82 49 -124 83 -5
+4 -41 30 -80 58 -38 27 -77 55 -85 62 -8 7 -56 41 -105 77 -50 35 -99 72 -109
+82 -11 10 -25 18 -32 18 -7 0 -14 4 -16 8 -3 7 -529 394 -566 417 -9 6 -19 13
+-22 16 -24 28 -44 25 -108 -19 -37 -24 -70 -49 -73 -54 -3 -5 -8 -9 -10 -7 -4
+3 -90 -51 -99 -62 -3 -3 -10 -8 -15 -10 -19 -8 -460 -304 -463 -311 -2 -5 -7
+-8 -12 -8 -9 0 -222 -140 -230 -152 -8 -10 -54 -1 -58 12 -2 5 -7 10 -12 10
+-5 0 -46 23 -92 51 -46 29 -96 59 -113 69 -16 10 -66 40 -110 67 -44 27 -87
+52 -95 56 -8 4 -28 16 -45 27 -16 11 -37 23 -45 27 -28 15 -115 67 -120 73 -3
+3 -16 11 -30 18 -36 17 -64 35 -72 47 -4 6 -8 6 -8 2 0 -4 -15 2 -32 15 -46
+32 -67 45 -115 69 -24 12 -43 25 -43 30 0 5 -5 9 -10 9 -6 0 -35 15 -65 34
+-29 19 -55 33 -57 30 -3 -2 -13 5 -23 16 -10 11 -21 20 -25 20 -4 0 -67 36
+-139 80 -73 44 -136 80 -142 80 -5 0 -9 4 -9 9 0 5 -8 11 -17 15 -10 3 -38 19
+-63 34 -116 73 -134 81 -147 67z"></path>
+  </g>
+</svg><a title="宋志刚(Sidgwick)的个人博客, 主要是一些技术记录和分享. 不写博客的技术人员不 是好的技术人员. 工作之余写点小博客, 记录学习中遇到的点点滴滴, 方便自己以后 查看, 也方便和我遇到一样问题的人.
+" href="/">挚爱荒原</a></div><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></div><nav class="navigation">
+        <ul><li class="navigation__item"><a href="/archive.html">归档</a></li><li class="navigation__item"><a href="/about.html">关于</a></li><li><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></li></ul>
+      </nav></div>
+  </header>
+</div><div class="page__content"><div class ="main"><div class="grid grid--reverse">
+
+              <div class="col-aside d-print-none js-col-aside"><aside class="page__aside js-page-aside"><div class="toc-aside js-toc-root"></div>
+</aside></div>
+
+              <div class="col-main cell cell--auto"><!-- start custom main top snippet -->
+
+<!-- end custom main top snippet -->
+<article itemscope itemtype="http://schema.org/Article"><div class="article__header"><header><h1>Memcached的slabs(内存管理)</h1></header><span class="split-space">&nbsp;</span>
+          <a class="edit-on-github"
+            title="在 Github 上修改"
+            href="https://github.com/sidgwick/sidgwick.github.io/tree/master/_posts/c/memcached/2015-11-05-Memcached-slabs.md">
+            <i class="far fa-edit"></i></a></div><meta itemprop="headline" content="Memcached的slabs(内存管理)"><div class="article__info clearfix"><ul class="left-col menu"><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=c">c</a>
+            </li><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=memcached">memcached</a>
+            </li></ul><ul class="right-col menu"><li><i class="far fa-calendar-alt"></i> <span>2015年 11月05日</span>
+            </li></ul></div><meta itemprop="author" content="Zhigang Song"/><meta itemprop="datePublished" content="2015-11-05T08:28:04+08:00">
+    <meta itemprop="keywords" content="c,memcached"><div class="js-article-content"><div class="layout--article"><!-- start custom article top snippet -->
+
+<!-- end custom article top snippet -->
+<div class="article__content" itemprop="articleBody"><p>初始化内存管理部分.
+Memcached 是按照页面来管理它使用的内存的. 这样做的好处是可以减少每次都新申请内
+存的<code class="language-plaintext highlighter-rouge">malloc</code>调用, 但是不可避免的产生了内存空间浪费. 本篇分析 Memcached 的内存管
+理机制</p>
+
+<!--more-->
+
+<h2 id="初始化部分分析">初始化部分分析</h2>
+
+<p>我们先来看内存管理用到的数据结构, 理解了这一块会对我们理解代码有很大的帮助.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define POWER_SMALLEST 1
+#define POWER_LARGEST  200
+#define POWER_BLOCK 1048576
+#define CHUNK_ALIGN_BYTES (sizeof(void *))
+#define DONT_PREALLOC_SLABS
+</span></code></pre></div></div>
+
+<p>上面的定义中, <code class="language-plaintext highlighter-rouge">POWER_XX</code>都是和内存块有关的. <code class="language-plaintext highlighter-rouge">POWER_SMALLEST</code>表示, 内存块的最小
+是 2^1 (即<code class="language-plaintext highlighter-rouge">POWER_SMALLEST</code>), 也即 2 Bytes. 最大是 2^200 (即<code class="language-plaintext highlighter-rouge">POWER_LARGEST</code>), 这是一个
+很大的数了, 实际上更本用不到这么多. 题外话, 这两个值在最开始(03-06 年)实际上分别是 6
+和 20, 也就是 2^6 = 48 Bytes 和 2^20 = 1M, 48Bytes 是 memcached 默认的最小 chunk 大小,
+1M 恰好是 Memcached 允许存储的单个元素最大值(算上 key, exptime 等等).
+<code class="language-plaintext highlighter-rouge">POWER_BLOCK</code>是一个 slab, 也即一个页面的大小, 我们有时候把它叫做 slab, 有时候把它叫
+做 page. 实际上指的是一个东西.</p>
+
+<p><code class="language-plaintext highlighter-rouge">CHUNK_ALIGN_BYTES</code> 指定了内存对齐相关的内容. 对齐的内存有更快的存取速度和更好
+的移植性. 而<code class="language-plaintext highlighter-rouge">DONT_PREALLOC_SLABS</code>的定义则把<code class="language-plaintext highlighter-rouge">prealloc_slabs</code>功能禁用. 这个功能对
+那些不了解 memcached 机制的人来说, 可能会更友好些, 但是此功能是不必要的.</p>
+
+<p>接下来是 slabclass 的数据结构定义. slabclass 是组织页面的数据结构, 每个
+slalclass 里面可以有多个 chunk size 一样的 slab, 而每个 slab 再进一步划分为相应大小
+的 chunk.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* powers-of-N allocation structures */</span>
+
+<span class="k">typedef</span> <span class="k">struct</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">;</span>      <span class="cm">/* sizes of items */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">perslab</span><span class="p">;</span>   <span class="cm">/* how many items per slab */</span>
+
+    <span class="kt">void</span> <span class="o">**</span><span class="n">slots</span><span class="p">;</span>           <span class="cm">/* list of item ptrs */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">sl_total</span><span class="p">;</span>  <span class="cm">/* size of previous array */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">sl_curr</span><span class="p">;</span>   <span class="cm">/* first free slot */</span>
+
+    <span class="kt">void</span> <span class="o">*</span><span class="n">end_page_ptr</span><span class="p">;</span>         <span class="cm">/* pointer to next free item at end of page, or 0 */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">end_page_free</span><span class="p">;</span> <span class="cm">/* number of items remaining at end of last alloced page */</span>
+
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">slabs</span><span class="p">;</span>     <span class="cm">/* how many slabs were allocated for this class */</span>
+
+    <span class="kt">void</span> <span class="o">**</span><span class="n">slab_list</span><span class="p">;</span>       <span class="cm">/* array of slab pointers */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">list_size</span><span class="p">;</span> <span class="cm">/* size of prev array */</span>
+
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">killing</span><span class="p">;</span>  <span class="cm">/* index+1 of dying slab, or zero if none */</span>
+<span class="p">}</span> <span class="n">slabclass_t</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>我们来解释一下, 各个成员变量.</p>
+
+<p>第一个, <code class="language-plaintext highlighter-rouge">size</code>, 顾名思义, 就是说这个 slabclass 有多少个 item 的. <code class="language-plaintext highlighter-rouge">preslab</code>是说, 在
+每个 slab 有多少个 chunk(能存多少个 item).</p>
+
+<p>接下来的成员叫做<code class="language-plaintext highlighter-rouge">slots</code>, 是个指向指针的指针, 这个成员很重要, 它记录了那些 slab 里
+面已经 free 的闲置空间. 如果没有这个成员, 我们就很难做到 LRU 了. <code class="language-plaintext highlighter-rouge">sl_total</code>标识了有
+多少空闲的<code class="language-plaintext highlighter-rouge">*slots</code>位置可供使用, 防止我们在遍历<code class="language-plaintext highlighter-rouge">slots</code>时越界, 也提醒我们在
+<code class="language-plaintext highlighter-rouge">slots</code>不够用的时候分配新的空间, 而<code class="language-plaintext highlighter-rouge">sl_curr</code>则说明了当前第一个空闲可用 chunk 的偏
+移(相对于<code class="language-plaintext highlighter-rouge">*slot</code>).</p>
+
+<p><code class="language-plaintext highlighter-rouge">end_page_ptr</code>, 这个也很重要, 这个成员指向了 slabclass 最新分配的那个 slab,
+<code class="language-plaintext highlighter-rouge">end_page_free</code>是一个游标, 指向了最新 slab 里面第一个可用的 chunk, 当这个值增长到
+<code class="language-plaintext highlighter-rouge">preslab</code>是, 说明这个 chunk 已经用完了, 在后面的代码里我们会看到, 我们是优先使用
+这个 slots 里面的空闲 chunk 的. 所以, 当这里也用完了, 就意味着我们需要分配新的空间
+了(当然了, 代码里没有立即申请, 因为在下一次存储请求到来之前, 说不定那些数据就
+过期了呢…)</p>
+
+<p><code class="language-plaintext highlighter-rouge">slabs</code>记录了这个 slabclass 当前有多少 slab, 接下来的二维指针用于记录这个
+slabclass 的各个 slab, <code class="language-plaintext highlighter-rouge">list_size</code>是指针数组的大小, <code class="language-plaintext highlighter-rouge">slab_list</code>用到的空间是通过
+2^N 来分配的, 这个值应该大于等于<code class="language-plaintext highlighter-rouge">slabs</code>. 最下面的 killing 作用不甚清除, 我随时
+<a href="#TODO">补充</a></p>
+
+<p><em>补充</em> killing 指的是要 reassign 那个 slab, 这个成员函数好象就在这里用到了</p>
+
+<p>在往后是几个文件作用域变量, 简单看一下. 需要注意, slabclass 的长度是
+<code class="language-plaintext highlighter-rouge">POWER_LARGEST + 1</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">slabclass_t</span> <span class="n">slabclass</span><span class="p">[</span><span class="n">POWER_LARGEST</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+<span class="k">static</span> <span class="kt">size_t</span> <span class="n">mem_limit</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="k">static</span> <span class="kt">size_t</span> <span class="n">mem_malloced</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="n">power_largest</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>下面是两个函数原型, 根据编译条件, 可以设定是不是编译<code class="language-plaintext highlighter-rouge">slabs_preallocate</code>函数.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*
+ * Forward Declarations
+ */</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">do_slabs_newslab</span><span class="p">(</span><span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">id</span><span class="p">);</span>
+
+<span class="cp">#ifndef DONT_PREALLOC_SLABS
+</span><span class="cm">/* Preallocate as many slab pages as possible (called from slabs_init)
+   on start-up, so users don't get confused out-of-memory errors when
+   they do have free (in-slab) space, but no space to make new slabs.
+   if maxslabs is 18 (POWER_LARGEST - POWER_SMALLEST + 1), then all
+   slab types can be made.  if max memory is less than 18 MB, only the
+   smaller ones will be made.  */</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">slabs_preallocate</span> <span class="p">(</span><span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">maxslabs</span><span class="p">);</span>
+<span class="cp">#endif
+</span></code></pre></div></div>
+
+<p>好了, 数据结构已经了解的差不多了, 下面来看看初始化代码(<code class="language-plaintext highlighter-rouge">main</code>函数里面,
+调用了<code class="language-plaintext highlighter-rouge">slabs_init</code>, 还记得么?)</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*
+ * Determines the chunk sizes and initializes the slab class descriptors
+ * accordingly.
+ */</span>
+<span class="kt">void</span> <span class="nf">slabs_init</span><span class="p">(</span><span class="k">const</span> <span class="kt">size_t</span> <span class="n">limit</span><span class="p">,</span> <span class="k">const</span> <span class="kt">double</span> <span class="n">factor</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="n">POWER_SMALLEST</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="o">+</span> <span class="n">settings</span><span class="p">.</span><span class="n">chunk_size</span><span class="p">;</span>
+
+    <span class="cm">/* Factor of 2.0 means use the default memcached behavior */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">factor</span> <span class="o">==</span> <span class="mi">2</span><span class="p">.</span><span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="mi">128</span><span class="p">)</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="mi">128</span><span class="p">;</span>
+
+    <span class="n">mem_limit</span> <span class="o">=</span> <span class="n">limit</span><span class="p">;</span>
+    <span class="n">memset</span><span class="p">(</span><span class="n">slabclass</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">slabclass</span><span class="p">));</span>
+
+    <span class="k">while</span> <span class="p">(</span><span class="o">++</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">POWER_LARGEST</span> <span class="o">&amp;&amp;</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="n">POWER_BLOCK</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* Make sure items are always n-byte aligned 内存对齐 */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">%</span> <span class="n">CHUNK_ALIGN_BYTES</span><span class="p">)</span>
+            <span class="n">size</span> <span class="o">+=</span> <span class="n">CHUNK_ALIGN_BYTES</span> <span class="o">-</span> <span class="p">(</span><span class="n">size</span> <span class="o">%</span> <span class="n">CHUNK_ALIGN_BYTES</span><span class="p">);</span>
+
+        <span class="cm">/* 每个数据块的大小 */</span>
+        <span class="n">slabclass</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span><span class="p">;</span>
+        <span class="cm">/* 计算得到, 每页(1M)能存放多少chunk */</span>
+        <span class="n">slabclass</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">perslab</span> <span class="o">=</span> <span class="n">POWER_BLOCK</span> <span class="o">/</span> <span class="n">slabclass</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">size</span><span class="p">;</span>
+        <span class="cm">/* 计算得到下一个slabclass里面每个chunk的大小 */</span>
+        <span class="n">size</span> <span class="o">*=</span> <span class="n">factor</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">settings</span><span class="p">.</span><span class="n">verbose</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"slab class %3d: chunk size %6u perslab %5u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+                    <span class="n">i</span><span class="p">,</span> <span class="n">slabclass</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">size</span><span class="p">,</span> <span class="n">slabclass</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">perslab</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* 最后一个slabclass单独处理, 每个slab可以存放一个item */</span>
+    <span class="n">power_largest</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="n">slabclass</span><span class="p">[</span><span class="n">power_largest</span><span class="p">].</span><span class="n">size</span> <span class="o">=</span> <span class="n">POWER_BLOCK</span><span class="p">;</span>
+    <span class="n">slabclass</span><span class="p">[</span><span class="n">power_largest</span><span class="p">].</span><span class="n">perslab</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+    <span class="cm">/* 下面一点代码是为了测试方便, 手动在环境中设定了一个值,
+       模拟已经分配的内存
+       for the test suite:  faking of how much we've already malloc'd */</span>
+    <span class="p">{</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">t_initial_malloc</span> <span class="o">=</span> <span class="n">getenv</span><span class="p">(</span><span class="s">"T_MEMD_INITIAL_MALLOC"</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">t_initial_malloc</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">mem_malloced</span> <span class="o">=</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)</span><span class="n">atol</span><span class="p">(</span><span class="n">t_initial_malloc</span><span class="p">);</span>
+        <span class="p">}</span>
+
+    <span class="p">}</span>
+
+<span class="cp">#ifndef DONT_PREALLOC_SLABS
+</span>    <span class="cm">/* 给每个slabclass都预分配一个slab, 用户比较眯瞪... */</span>
+    <span class="p">{</span>
+        <span class="cm">/* 测试变量, 模拟预分配设定大小 */</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">pre_alloc</span> <span class="o">=</span> <span class="n">getenv</span><span class="p">(</span><span class="s">"T_MEMD_SLABS_ALLOC"</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">pre_alloc</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">||</span> <span class="n">atoi</span><span class="p">(</span><span class="n">pre_alloc</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">slabs_preallocate</span><span class="p">(</span><span class="n">power_largest</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="cp">#endif
+</span><span class="p">}</span>
+
+<span class="cp">#ifndef DONT_PREALLOC_SLABS
+</span><span class="k">static</span> <span class="kt">void</span> <span class="nf">slabs_preallocate</span> <span class="p">(</span><span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">maxslabs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">prealloc</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* pre-allocate a 1MB slab in every size class so people don't get
+       confused by non-intuitive "SERVER_ERROR out of memory"
+       messages.  this is the most common question on the mailing
+       list.  if you really don't want this, you can rebuild without
+       these three lines.  */</span>
+
+    <span class="cm">/* 循环给每个slabclass分配一个slab */</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="n">POWER_SMALLEST</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="n">POWER_LARGEST</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">prealloc</span> <span class="o">&gt;</span> <span class="n">maxslabs</span><span class="p">)</span>
+            <span class="k">return</span><span class="p">;</span>
+        <span class="cm">/* 这里给slabclass_i分配一个页面(page或者叫slab, 大小为1M) */</span>
+        <span class="n">do_slabs_newslab</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+<span class="cp">#endif
+</span></code></pre></div></div>
+
+<p>上面说了很多, 但是逻辑很简单, 首先初始化 slabclass 空间. 之后根据编译条件, 选择是
+不是预分配空间给各个 slabclass. 在<code class="language-plaintext highlighter-rouge">slabs_preallocate</code>函数中, 我们调用了一个叫做
+<code class="language-plaintext highlighter-rouge">do_slabs_newslab</code>的函数, 这个函数负责分配一个 slab 的内存空间, 在程序的新分配页面
+的时候也调用了这个函数. 再看这个函数的工作原理之前, 我们在夯实一下基础, 看看
+追踪 slab 的<code class="language-plaintext highlighter-rouge">slab_list</code>数组的分配.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">grow_slab_list</span> <span class="p">(</span><span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* 这里操作slabclass[i]的引用 */</span>
+    <span class="n">slabclass_t</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+    <span class="cm">/* 当slabs的数目达到了分配的空间大小, 就要考虑分配新的空间了 */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span> <span class="o">==</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">list_size</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* 初始化的大小是16个, 之后才会成2倍增长 */</span>
+        <span class="kt">size_t</span> <span class="n">new_size</span> <span class="o">=</span>  <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">list_size</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">?</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">list_size</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">:</span> <span class="mi">16</span><span class="p">;</span>
+        <span class="cm">/* slab_list里面存放的是各个slab的指针, 我们分配的单位是指针大小 */</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">new_list</span> <span class="o">=</span> <span class="n">realloc</span><span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">,</span> <span class="n">new_size</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">));</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">new_list</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="cm">/* 更新数组大小并指向新的空间 */</span>
+        <span class="n">p</span><span class="o">-&gt;</span><span class="n">list_size</span> <span class="o">=</span> <span class="n">new_size</span><span class="p">;</span>
+        <span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span> <span class="o">=</span> <span class="n">new_list</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们准备的够充分了, 下面来看看<code class="language-plaintext highlighter-rouge">do_slabs_newslab</code>函数是怎么工作的.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">do_slabs_newslab</span><span class="p">(</span><span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* 这里, 我们要操作的是slabclass[id]的引用 */</span>
+    <span class="n">slabclass_t</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+
+<span class="cm">/* 这个条件是指示是不是允许slab在不同的slabclass之间移动的
+ * 允许移动的, 在下一个slabclass里面可能会使用比现有len多的空间, 所以要设定成
+ * 为POWER_BLOCK, 而不允许分配, 那我们就要尽可能的节约内存, 能省多少是多少.
+ */</span>
+<span class="cp">#ifdef ALLOW_SLABS_REASSIGN
+</span>    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">POWER_BLOCK</span><span class="p">;</span>
+<span class="cp">#else
+</span>    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">*</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">perslab</span><span class="p">;</span>
+<span class="cp">#endif
+</span>    <span class="kt">char</span> <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+
+    <span class="cm">/* 检查内存使用情况, 确保不会超出设定的使用范围
+     * p-&gt;slabs标识了当前slabcalss有多少页面, 这里为何要大于0不是很清楚,
+     * 我随时补充(#TDOD)
+     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">mem_limit</span> <span class="o">&amp;&amp;</span> <span class="n">mem_malloced</span> <span class="o">+</span> <span class="n">len</span> <span class="o">&gt;</span> <span class="n">mem_limit</span> <span class="o">&amp;&amp;</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">grow_slab_list</span><span class="p">(</span><span class="n">id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* 给slab分配空间 */</span>
+    <span class="n">ptr</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">((</span><span class="kt">size_t</span><span class="p">)</span><span class="n">len</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ptr</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* 把新分配的页面(slab)挂到end_page_ptr, 并设定end_page_free指向可用chunk */</span>
+    <span class="n">memset</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)</span><span class="n">len</span><span class="p">);</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">;</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_free</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">perslab</span><span class="p">;</span>
+
+    <span class="cm">/* 这个页面还应该挂到slab_list, 方便以后管理它 */</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">;</span>
+    <span class="n">mem_malloced</span> <span class="o">+=</span> <span class="n">len</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="slab-item-的分配算法">slab item 的分配算法</h2>
+
+<p>上面介绍了 slabclass 的初始化过程, 在运行中, 当 slabclass 上的 slots 里面没有可用空
+间的时候, 就会向系统申请新的页面, 这个过程就是 memcached 内存管理比较核心的东西
+了. 接下来是相关的代码.</p>
+
+<p>这里插入一点基础内容, 那就是, 我们知道数据是根据大小定位到相应的 slabclass,
+然后在这个 slabclass 的 slabs 里面找一块空间来存储数据. 那么, memcached 是怎么确定
+应该把数据存放到那个 slabclass 里面呢?</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*
+ * Figures out which slab class (chunk size) is required to store an item of
+ * a given size.
+ *
+ * Given object size, return id to use when allocating/freeing memory for object
+ * 0 means error: can't store such a large object
+ */</span>
+
+<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">slabs_clsid</span><span class="p">(</span><span class="k">const</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">res</span> <span class="o">=</span> <span class="n">POWER_SMALLEST</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="cm">/* 找到那个最小但是又能装下内容的slabclass */</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">slabclass</span><span class="p">[</span><span class="n">res</span><span class="p">].</span><span class="n">size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">res</span><span class="o">++</span> <span class="o">==</span> <span class="n">power_largest</span><span class="p">)</span>     <span class="cm">/* won't fit in the biggest slab */</span>
+            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>事实上, 函数里在分配 item 空间时, 调用的是一个叫做<code class="language-plaintext highlighter-rouge">slabs_alloc</code>的函数, 它实际上
+是一个宏, 根据编译选项的不同, 可能是<code class="language-plaintext highlighter-rouge">do_slabs_alloc</code>或者<code class="language-plaintext highlighter-rouge">mt_slabs_alloc</code>. 这
+个宏定义在 memcached.h 中, 相关代码摘抄如下(这里定义了巨量的多线程加锁版本函数,
+我们只看涉及到的, 其他的以后再说).</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#ifdef USE_THREADS
+</span><span class="kt">void</span> <span class="o">*</span><span class="nf">mt_slabs_alloc</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+
+<span class="cp"># define slabs_alloc(x)              mt_slabs_alloc(x)
+#else </span><span class="cm">/* !USE_THREADS 这个ifdef条件太长了, 以至于要加上注释方便知道这个else是谁的 */</span><span class="cp">
+# define slabs_alloc(x)              do_slabs_alloc(x)
+#endif </span><span class="cm">/* !USE_THREADS */</span><span class="cp">
+</span></code></pre></div></div>
+
+<p>OK, 由于<code class="language-plaintext highlighter-rouge">mt_slabs_alloc</code>只是<code class="language-plaintext highlighter-rouge">do_slabs_alloc</code>的加锁版本, 那么我们先来看
+<code class="language-plaintext highlighter-rouge">do_slabs_alloc</code>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*@null@*/</span>
+<span class="kt">void</span> <span class="o">*</span><span class="nf">do_slabs_alloc</span><span class="p">(</span><span class="k">const</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">slabclass_t</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+
+    <span class="cm">/* 找ID? 我们已经知道你是怎么找的啦. */</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">id</span> <span class="o">=</span> <span class="n">slabs_clsid</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">id</span> <span class="o">&lt;</span> <span class="n">POWER_SMALLEST</span> <span class="o">||</span> <span class="n">id</span> <span class="o">&gt;</span> <span class="n">power_largest</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="cm">/* 定位到相应的slabclass, 待会从里面取得item存储空间 */</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+    <span class="cm">/* 下面这个断言很有意思, 揭示了新的item分配的一些内部状态, 来解释一下.
+     * p-&gt;sl_curr == 0 表明, 这个新slabclass的第一个空闲item槽(slot)为空,
+     * 即初始化的状态. 因为只有在这种状态下, 我们才会考虑使用`end_page_ptr`
+     * 指向的空闲item. 然后如果在这里发现空间不够, 需要申请新的slab. 否则,
+     * 我们就不需要去申请新的slab. 当该值不为零, 我们就需要验证第二个条件,
+     * 这个状态涉及到一些我们在删除item的时候的一些操作, 在删除时, 我们有设定
+     * slabs_clsid = 0的操作. 这里拿来验证一下以确保我们得到的确实是释放了的
+     * 空闲chunk
+     */</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="p">((</span><span class="n">item</span> <span class="o">*</span><span class="p">)</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span><span class="o">-&gt;</span><span class="n">slabs_clsid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="cm">/* USE_SYSTEM_MALLOC 定义是不是使用我们自己的这一套slab内存管理系统
+ * 若不使用, 就直接调用系统接口, 这种方式的效率肯定比不上slab, 但是优点就是简单
+ */</span>
+<span class="cp">#ifdef USE_SYSTEM_MALLOC
+</span>    <span class="k">if</span> <span class="p">(</span><span class="n">mem_limit</span> <span class="o">&amp;&amp;</span> <span class="n">mem_malloced</span> <span class="o">+</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">mem_limit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">mem_malloced</span> <span class="o">+=</span> <span class="n">size</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">malloc</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+<span class="cp">#endif
+</span>
+    <span class="cm">/* fail unless we have space at the end of a recently allocated page,
+       we have something on our freelist, or we could allocate a new page
+       检查两个地方, 即sl_curr和end_page_ptr, 当着两个都为0, 我们就需要
+       申请新的slab了, sl_curr == 0表示没有空闲item好理解. end_page_ptr
+       在哪设置? 答案是本函数后面几行, 请仔细看.
+
+       do_slabs_alloc会帮我们正确的设置end_page_ptr以及end_page_free,
+       后面我们就可以高枕无忧的获取新item内存了
+     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">do_slabs_newslab</span><span class="p">(</span><span class="n">id</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* return off our freelist, if we have one, 这里是从slots反会, 优先使用 */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="o">--</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span><span class="p">];</span>
+
+    <span class="cm">/* if we recently allocated a whole page, return from that
+       不行就从end_page_ptr(最后一次分配的那个页面)返回
+     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span><span class="p">;</span>
+        <span class="cm">/* end_page_ptr增长一个item大小, end_page_free 减去1 */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">--</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_free</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">+=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">ptr</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* 走到这? 去死吧, 肯定哪里出错了 */</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>  <span class="cm">/* shouldn't ever get here */</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="slab-item-的回收算法">slab item 的回收算法</h2>
+
+<p>有分配, 对应的也会有回收.现在我们来了解下实现的细节. 此函数接受两个参数,
+分别是 item 的 pointer 和 size. 这个函数只是实现了内存回收, 具体的 item 作废, 是在
+item 管理模块完成的. 我们在<a href="#TODO">其他文章</a>做详细介绍</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">do_slabs_free</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">,</span> <span class="k">const</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">id</span> <span class="o">=</span> <span class="n">slabs_clsid</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+    <span class="n">slabclass_t</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+
+    <span class="cm">/* 本函数被调用之前, 已经准备好了将要释放这个item,
+       那时候它的slabs_clsid即已经为0了 */</span>
+    <span class="n">assert</span><span class="p">(((</span><span class="n">item</span> <span class="o">*</span><span class="p">)</span><span class="n">ptr</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">slabs_clsid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="cm">/* 断言ID应该在一个合理的范围 */</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">id</span> <span class="o">&gt;=</span> <span class="n">POWER_SMALLEST</span> <span class="o">&amp;&amp;</span> <span class="n">id</span> <span class="o">&lt;=</span> <span class="n">power_largest</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">id</span> <span class="o">&lt;</span> <span class="n">POWER_SMALLEST</span> <span class="o">||</span> <span class="n">id</span> <span class="o">&gt;</span> <span class="n">power_largest</span><span class="p">)</span>
+        <span class="k">return</span><span class="p">;</span>
+
+    <span class="cm">/* 老规矩, 操作引用. */</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+
+<span class="cm">/* 使用系统调用管理内存 */</span>
+<span class="cp">#ifdef USE_SYSTEM_MALLOC
+</span>    <span class="n">mem_malloced</span> <span class="o">-=</span> <span class="n">size</span><span class="p">;</span>
+    <span class="n">free</span><span class="p">(</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="k">return</span><span class="p">;</span>
+<span class="cp">#endif
+</span>
+    <span class="cm">/* slots槽满了, 新分配一点槽, 用来装更多的空闲chunk */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">==</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_total</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* need more space on the free list */</span>
+        <span class="kt">int</span> <span class="n">new_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_total</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">?</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_total</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">:</span> <span class="mi">16</span><span class="p">;</span>  <span class="cm">/* 16 is arbitrary */</span>
+        <span class="kt">void</span> <span class="o">**</span><span class="n">new_slots</span> <span class="o">=</span> <span class="n">realloc</span><span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">,</span> <span class="n">new_size</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">));</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">new_slots</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span><span class="p">;</span>
+        <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span> <span class="o">=</span> <span class="n">new_slots</span><span class="p">;</span>
+        <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_total</span> <span class="o">=</span> <span class="n">new_size</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="cm">/* 闲置chunk放到槽里 */</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">;</span>
+    <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>至此, slabs 模块已经介绍了个大概了, 还剩下统计和 reassign 两个功能没有介绍. 统计
+我们打算到介绍 Memcached 的统计功能时再介绍. 下面来看看 reassign. 源码注释里提到,
+这个功能默认是关闭的, 应为它可能会造成内存的浪费, 但是这个方法实现了手动管理
+内存的机制, 权衡之下, 这个功能还是可以说是利器. 不过可能并不好用, 因为迁移 slab
+要满足源 slab 的新 slab 指针指向空并且要有 slab. 目标 slab 要满足新 slab 指针指向空, 还
+要有空间来容纳这个迁过来的 slab. 仅仅是指向空这些条件, 在整体内存没有达到
+settings.maxbytes 或者内存没有耗干之前, 还是比较难以控制的. 当然, 在达到内存上
+限之后, 这些条件就一定会满足了. 到那个时候使用 slab reassign 就好多了</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+</code></pre></div></div>
+
+<p>下面是实现 reassign 的代码, 利用这段代码, 可以实现手动管理内存的需求.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#ifdef ALLOW_SLABS_REASSIGN
+</span><span class="cm">/* Blows away all the items in a slab class and moves its slabs to another
+ * class. This is only used by the "slabs reassign" command, for manual tweaking
+ * of memory allocation. It's disabled by default since it requires that all
+ * slabs be the same size (which can waste space for chunk size mantissas(尾数) of
+ * other than 2.0).
+ * 1 = success
+ * 0 = fail
+ * -1 = tried. busy. send again shortly.
+ *
+ * 这里说, 需要大小一样, 就是指len = POWER_LARGEST or (size * perslab)
+ */</span>
+<span class="kt">int</span> <span class="nf">do_slabs_reassign</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">srcid</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">dstid</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">slab</span><span class="p">,</span> <span class="o">*</span><span class="n">slab_end</span><span class="p">;</span>
+    <span class="n">slabclass_t</span> <span class="o">*</span><span class="n">p</span><span class="p">,</span> <span class="o">*</span><span class="n">dp</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">iter</span><span class="p">;</span>
+    <span class="n">bool</span> <span class="n">was_busy</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+    <span class="cm">/* 先判断数据是不是明显不符合条件 */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">srcid</span> <span class="o">&lt;</span> <span class="n">POWER_SMALLEST</span> <span class="o">||</span> <span class="n">srcid</span> <span class="o">&gt;</span> <span class="n">power_largest</span> <span class="o">||</span>
+        <span class="n">dstid</span> <span class="o">&lt;</span> <span class="n">POWER_SMALLEST</span> <span class="o">||</span> <span class="n">dstid</span> <span class="o">&gt;</span> <span class="n">power_largest</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* 操作引用 */</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">srcid</span><span class="p">];</span>
+    <span class="n">dp</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">slabclass</span><span class="p">[</span><span class="n">dstid</span><span class="p">];</span>
+
+    <span class="cm">/* fail if src still populating, or no slab to give up in src
+     * 能迁移的前提是, 本slabclass没有空闲的end_page, 并且它包含的
+     * items个数不能为0, 也就是说, 这个slabclass不能为空
+     * 简单说, 就是
+     *
+     * if (p-&gt;end_page_ptr == 0 &amp;&amp; p-&gt;slabs != 0)
+     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">||</span> <span class="o">!</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* fail if dst is still growing or we can't make room to hold its new one
+     * 道理和src slabcalss一样的, 但是增加了slab_list和list_size的检查, 确保
+     * 有空间接受新来的这个slab
+     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dp</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">||</span> <span class="o">!</span> <span class="n">grow_slab_list</span><span class="p">(</span><span class="n">dstid</span><span class="p">))</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* killing指的是要reassign那个slab, 从1开始计数 */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">killing</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">killing</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+    <span class="cm">/* 找到源空间的起始地址 */</span>
+    <span class="n">slab</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">killing</span> <span class="o">-</span> <span class="mi">1</span><span class="p">];</span>
+    <span class="n">slab_end</span> <span class="o">=</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">slab</span> <span class="o">+</span> <span class="n">POWER_BLOCK</span><span class="p">;</span>
+
+    <span class="cm">/* 源空间里面的所有item都不要了, 清空, 关于item结构成员的细节,
+     * 参考我其他的博客.
+     */</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">iter</span> <span class="o">=</span> <span class="n">slab</span><span class="p">;</span> <span class="n">iter</span> <span class="o">&lt;</span> <span class="n">slab_end</span><span class="p">;</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">iter</span> <span class="o">+=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">item</span> <span class="o">*</span><span class="n">it</span> <span class="o">=</span> <span class="p">(</span><span class="n">item</span> <span class="o">*</span><span class="p">)</span><span class="n">iter</span><span class="p">;</span>
+        <span class="cm">/* slabs_clsid不为0, 表示这是一个有效数据 */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">slabs_clsid</span><span class="p">)</span> <span class="p">{</span>
+            <span class="cm">/* refcount大于0, 表示在其他地方正在使用这个值, 目前不能删 */</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">refcount</span><span class="p">)</span> <span class="n">was_busy</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+            <span class="cm">/* 把item从链表里面除掉 */</span>
+            <span class="n">item_unlink</span><span class="p">(</span><span class="n">it</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* go through free list and discard items that are no longer part of this slab
+     * 下面的过程就是剔除slots里面属于src slab的内容, 这个过程还是很巧秒的.
+     */</span>
+    <span class="p">{</span>
+        <span class="kt">int</span> <span class="n">fi</span><span class="p">;</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">fi</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="n">fi</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">fi</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">fi</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">slab</span> <span class="o">&amp;&amp;</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">fi</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">slab_end</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span><span class="o">--</span><span class="p">;</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span> <span class="o">&gt;</span> <span class="n">fi</span><span class="p">)</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">fi</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slots</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">sl_curr</span><span class="p">];</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">was_busy</span><span class="p">)</span> <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="cm">/* if good, now move it to the dst slab class
+     * 现在往目标slabclass迁移
+     */</span>
+    <span class="cm">/* 最后一个萝卜放到空出来的坑里面 */</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">killing</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">[</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span> <span class="o">-</span> <span class="mi">1</span><span class="p">];</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">slabs</span><span class="o">--</span><span class="p">;</span>
+    <span class="n">p</span><span class="o">-&gt;</span><span class="n">killing</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="cm">/* 在目标slabclass, 把萝卜栽进去, 这里相当于新分配一个页面到目标slabclass */</span>
+    <span class="n">dp</span><span class="o">-&gt;</span><span class="n">slab_list</span><span class="p">[</span><span class="n">dp</span><span class="o">-&gt;</span><span class="n">slabs</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">slab</span><span class="p">;</span>
+    <span class="n">dp</span><span class="o">-&gt;</span><span class="n">end_page_ptr</span> <span class="o">=</span> <span class="n">slab</span><span class="p">;</span>
+    <span class="n">dp</span><span class="o">-&gt;</span><span class="n">end_page_free</span> <span class="o">=</span> <span class="n">dp</span><span class="o">-&gt;</span><span class="n">perslab</span><span class="p">;</span>
+    <span class="cm">/* this isn't too critical, but other parts of the code do asserts to
+     * make sure this field is always 0. 这里再填一次0, 确保后面的东西正常
+     */</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">iter</span> <span class="o">=</span> <span class="n">slab</span><span class="p">;</span> <span class="n">iter</span> <span class="o">&lt;</span> <span class="n">slab_end</span><span class="p">;</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">iter</span> <span class="o">+=</span> <span class="n">dp</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+        <span class="p">((</span><span class="n">item</span> <span class="o">*</span><span class="p">)</span><span class="n">iter</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">slabs_clsid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="cp">#endif
+</span></code></pre></div></div>
+</div><section class="article__sharing d-print-none"></section><div class="d-print-none"><footer class="article__footer"><meta itemprop="dateModified" content="2015-11-05T08:28:04+08:00"><!-- start custom article footer snippet -->
+
+<!-- end custom article footer snippet -->
+<div class="article__subscribe"><div class="subscribe"><i class="fas fa-rss"></i> <a type="application/rss+xml" href="/feed.xml">订阅</a></div>
+</div><div class="article__license"></div></footer>
+<div class="article__section-navigator clearfix"><div class="previous"><span>上篇</span><a href="/2015/11/04/Memcached-socket-init.html">Memcached套接字的初始化</a></div><div class="next"><span>下篇</span><a href="/2015/11/06/Memcached-event-handler.html">Memcached的事件处理函数</a></div></div></div>
+
+</div>
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    $(function() {
+      var $this ,$scroll;
+      var $articleContent = $('.js-article-content');
+      var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+      var scroll = hasSidebar ? '.js-page-main' : 'html, body';
+      $scroll = $(scroll);
+
+      $articleContent.find('.highlight').each(function() {
+        $this = $(this);
+        $this.attr('data-lang', $this.find('code').attr('data-lang'));
+      });
+      $articleContent.find('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]').each(function() {
+        $this = $(this);
+        $this.append($('<a class="anchor d-print-none" aria-hidden="true"></a>').html('<i class="fas fa-anchor"></i>'));
+      });
+      $articleContent.on('click', '.anchor', function() {
+        $scroll.scrollToAnchor('#' + $(this).parent().attr('id'), 400);
+      });
+    });
+  });
+})();
+</script>
+</div><section class="page__comments d-print-none"></section></article><!-- start custom main bottom snippet -->
+
+<!-- end custom main bottom snippet -->
+</div>
+            </div></div></div><div class="page__footer d-print-none">
+<footer class="footer py-4 js-page-footer">
+    <div class="main"><div itemscope itemtype="http://schema.org/Person">
+        <meta itemprop="name" content="Zhigang Song"><meta itemprop="url" content="/"><meta itemprop="description" content="一个安静的程序员"><div class="footer__author-links"><div class="author-links">
+  <ul class="menu menu--nowrap menu--inline"><li title="在 Github 上关注我。">
+        <a class="button button--circle github-button" itemprop="sameAs" href="https://github.com/sidgwick" target="_blank">
+          <div class="icon"><svg fill="#000000" width="24px" height="24px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <path class="svgpath" data-index="path_0" fill="#272636" d="M0 525.2c0 223.6 143.3 413.7 343 483.5 26.9 6.8 22.8-12.4 22.8-25.4l0-88.7c-155.3 18.2-161.5-84.6-172-101.7-21.1-36-70.8-45.2-56-62.3 35.4-18.2 71.4 4.6 113.1 66.3 30.2 44.7 89.1 37.2 119 29.7 6.5-26.9 20.5-50.9 39.7-69.6C248.8 728.2 181.7 630 181.7 513.2c0-56.6 18.7-108.7 55.3-150.7-23.3-69.3 2.2-128.5 5.6-137.3 66.5-6 135.5 47.6 140.9 51.8 37.8-10.2 80.9-15.6 129.1-15.6 48.5 0 91.8 5.6 129.8 15.9 12.9-9.8 77-55.8 138.8-50.2 3.3 8.8 28.2 66.7 6.3 135 37.1 42.1 56 94.6 56 151.4 0 117-67.5 215.3-228.8 243.7 26.9 26.6 43.6 63.4 43.6 104.2l0 128.8c0.9 10.3 0 20.5 17.2 20.5C878.1 942.4 1024 750.9 1024 525.3c0-282.9-229.3-512-512-512C229.1 13.2 0 242.3 0 525.2L0 525.2z" />
+</svg>
+</div>
+        </a>
+      </li></ul>
+</div>
+</div>
+      </div><div class="site-info mt-2">
+        <div>© Zhigang Song 2015-2024,
+          Powered by <a title="Jekyll is a simple, blog-aware, static site generator." href="http://jekyllrb.com/">Jekyll</a> & <a
+          title="TeXt is a super customizable Jekyll theme." href="https://github.com/kitian616/jekyll-TeXt-theme">TeXt Theme</a>.
+        </div>
+        <div>
+            <a href="https://beian.miit.gov.cn/">豫ICP备19037616号</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+  </div></div>
+    </div><script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $body = $('body'), $window = $(window);
+    var $pageRoot = $('.js-page-root'), $pageMain = $('.js-page-main');
+    var activeCount = 0;
+    function modal(options) {
+      var $root = this, visible, onChange, hideWhenWindowScroll = false;
+      var scrollTop;
+      function setOptions(options) {
+        var _options = options || {};
+        visible = _options.initialVisible === undefined ? false : show;
+        onChange = _options.onChange;
+        hideWhenWindowScroll = _options.hideWhenWindowScroll;
+      }
+      function init() {
+        setState(visible);
+      }
+      function setState(isShow) {
+        if (isShow === visible) {
+          return;
+        }
+        visible = isShow;
+        if (visible) {
+          activeCount++;
+          scrollTop = $(window).scrollTop() || $pageMain.scrollTop();
+          $root.addClass('modal--show');
+          $pageMain.scrollTop(scrollTop);
+          activeCount === 1 && ($pageRoot.addClass('show-modal'), $body.addClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.on('scroll', hide);
+          $window.on('keyup', handleKeyup);
+        } else {
+          activeCount > 0 && activeCount--;
+          $root.removeClass('modal--show');
+          $window.scrollTop(scrollTop);
+          activeCount === 0 && ($pageRoot.removeClass('show-modal'), $body.removeClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.off('scroll', hide);
+          $window.off('keyup', handleKeyup);
+        }
+        onChange && onChange(visible);
+      }
+      function show() {
+        setState(true);
+      }
+      function hide() {
+        setState(false);
+      }
+      function handleKeyup(e) {
+        // Char Code: 27  ESC
+        if (e.which ===  27) {
+          hide();
+        }
+      }
+      setOptions(options);
+      init();
+      return {
+        show: show,
+        hide: hide,
+        $el: $root
+      };
+    }
+    $.fn.modal = modal;
+  });
+})();
+</script><div class="modal modal--overflow page__search-modal d-print-none js-page-search-modal"><script>
+(function () {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    // search panel
+    var search = (window.search || (window.search = {}));
+    var useDefaultSearchBox = window.useDefaultSearchBox === undefined ?
+      true : window.useDefaultSearchBox ;
+
+    var $searchModal = $('.js-page-search-modal');
+    var $searchToggle = $('.js-search-toggle');
+    var searchModal = $searchModal.modal({ onChange: handleModalChange, hideWhenWindowScroll: true });
+    var modalVisible = false;
+    search.searchModal = searchModal;
+
+    var $searchBox = null;
+    var $searchInput = null;
+    var $searchClear = null;
+
+    function getModalVisible() {
+      return modalVisible;
+    }
+    search.getModalVisible = getModalVisible;
+
+    function handleModalChange(visible) {
+      modalVisible = visible;
+      if (visible) {
+        search.onShow && search.onShow();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].focus();
+      } else {
+        search.onShow && search.onHide();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].blur();
+        setTimeout(function() {
+          useDefaultSearchBox && ($searchInput.val(''), $searchBox.removeClass('not-empty'));
+          search.clear && search.clear();
+          window.pageAsideAffix && window.pageAsideAffix.refresh();
+        }, 400);
+      }
+    }
+
+    $searchToggle.on('click', function() {
+      modalVisible ? searchModal.hide() : searchModal.show();
+    });
+    // Char Code: 83  S, 191 /
+    $(window).on('keyup', function(e) {
+      if (!modalVisible && !window.isFormElement(e.target || e.srcElement) && (e.which === 83 || e.which === 191)) {
+        modalVisible || searchModal.show();
+      }
+    });
+
+    if (useDefaultSearchBox) {
+      $searchBox = $('.js-search-box');
+      $searchInput = $searchBox.children('input');
+      $searchClear = $searchBox.children('.js-icon-clear');
+      search.getSearchInput = function() {
+        return $searchInput.get(0);
+      };
+      search.getVal = function() {
+        return $searchInput.val();
+      };
+      search.setVal = function(val) {
+        $searchInput.val(val);
+      };
+
+      $searchInput.on('focus', function() {
+        $(this).addClass('focus');
+      });
+      $searchInput.on('blur', function() {
+        $(this).removeClass('focus');
+      });
+      $searchInput.on('input', window.throttle(function() {
+        var val = $(this).val();
+        if (val === '' || typeof val !== 'string') {
+          search.clear && search.clear();
+        } else {
+          $searchBox.addClass('not-empty');
+          search.onInputNotEmpty && search.onInputNotEmpty(val);
+        }
+      }, 400));
+      $searchClear.on('click', function() {
+        $searchInput.val(''); $searchBox.removeClass('not-empty');
+        search.clear && search.clear();
+      });
+    }
+  });
+})();
+</script><div class="search search--dark">
+  <div class="main">
+    <div class="search__header">搜索</div>
+    <div class="search-bar">
+      <div class="search-box js-search-box">
+        <div class="search-box__icon-search"><i class="fas fa-search"></i></div>
+        <input type="text" />
+        <div class="search-box__icon-clear js-icon-clear">
+          <a><i class="fas fa-times"></i></a>
+        </div>
+      </div>
+      <button class="button button--theme-dark button--pill search__cancel js-search-toggle">
+        取消</button>
+    </div>
+    <div class="search-result js-search-result"></div>
+  </div>
+</div>
+<script>var SOURCES = window.TEXT_VARIABLES.sources;
+var PAHTS = window.TEXT_VARIABLES.paths;
+window.Lazyload.js([SOURCES.jquery, PAHTS.search_js], function() {
+  var search = (window.search || (window.search = {}));
+  var searchData = window.TEXT_SEARCH_DATA || {};
+
+  function memorize(f) {
+    var cache = {};
+    return function () {
+      var key = Array.prototype.join.call(arguments, ',');
+      if (key in cache) return cache[key];
+      else return cache[key] = f.apply(this, arguments);
+    };
+  }
+
+  /// search
+  function searchByQuery(query) {
+    var i, j, key, keys, cur, _title, result = {};
+    keys = Object.keys(searchData);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      for (j = 0; j < searchData[key].length; j++) {
+        cur = searchData[key][j], _title = cur.title;
+        if ((result[key] === undefined || result[key] && result[key].length < 4 )
+          && _title.toLowerCase().indexOf(query.toLowerCase()) >= 0) {
+          if (result[key] === undefined) {
+            result[key] = [];
+          }
+          result[key].push(cur);
+        }
+      }
+    }
+    return result;
+  }
+
+  var renderHeader = memorize(function(header) {
+    return $('<p class="search-result__header">' + header + '</p>');
+  });
+
+  var renderItem = function(index, title, url) {
+    return $('<li class="search-result__item" data-index="' + index + '"><a class="button" href="' + url + '">' + title + '</a></li>');
+  };
+
+  function render(data) {
+    if (!data) { return null; }
+    var $root = $('<ul></ul>'), i, j, key, keys, cur, itemIndex = 0;
+    keys = Object.keys(data);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      $root.append(renderHeader(key));
+      for (j = 0; j < data[key].length; j++) {
+        cur = data[key][j];
+        $root.append(renderItem(itemIndex++, cur.title, cur.url));
+      }
+    }
+    return $root;
+  }
+
+  // search box
+  var $result = $('.js-search-result'), $resultItems;
+  var lastActiveIndex, activeIndex;
+
+  function clear() {
+    $result.html(null);
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+  }
+  function onInputNotEmpty(val) {
+    $result.html(render(searchByQuery(val)));
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+    $resultItems.eq(0).addClass('active');
+  }
+
+  search.clear = clear;
+  search.onInputNotEmpty = onInputNotEmpty;
+
+  function updateResultItems() {
+    lastActiveIndex >= 0 && $resultItems.eq(lastActiveIndex).removeClass('active');
+    activeIndex >= 0 && $resultItems.eq(activeIndex).addClass('active');
+  }
+
+  function moveActiveIndex(direction) {
+    var itemsCount = $resultItems ? $resultItems.length : 0;
+    if (itemsCount > 1) {
+      lastActiveIndex = activeIndex;
+      if (direction === 'up') {
+        activeIndex = (activeIndex - 1 + itemsCount) % itemsCount;
+      } else if (direction === 'down') {
+        activeIndex = (activeIndex + 1 + itemsCount) % itemsCount;
+      }
+      updateResultItems();
+    }
+  }
+
+  // Char Code: 13  Enter, 37  ⬅, 38  ⬆, 39  ➡, 40  ⬇
+  $(window).on('keyup', function(e) {
+    var modalVisible = search.getModalVisible && search.getModalVisible();
+    if (modalVisible) {
+      if (e.which === 38) {
+        modalVisible && moveActiveIndex('up');
+      } else if (e.which === 40) {
+        modalVisible && moveActiveIndex('down');
+      } else if (e.which === 13) {
+        modalVisible && $resultItems && activeIndex >= 0 && $resultItems.eq(activeIndex).children('a')[0].click();
+      }
+    }
+  });
+
+  $result.on('mouseover', '.search-result__item > a', function() {
+    var itemIndex = $(this).parent().data('index');
+    itemIndex >= 0 && (lastActiveIndex = activeIndex, activeIndex = itemIndex, updateResultItems());
+  });
+});
+</script>
+</div></div>
+
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function scrollToAnchor(anchor, duration, callback) {
+      var $root = this;
+      $root.animate({ scrollTop: $(anchor).position().top }, duration, function() {
+        window.history.replaceState(null, '', window.location.href.split('#')[0] + anchor);
+        callback && callback();
+      });
+    }
+    $.fn.scrollToAnchor = scrollToAnchor;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function affix(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroll,
+        offsetBottom = 0, scrollTarget = window, scroll = window.document, disabled = false, isOverallScroller = true,
+        rootTop, rootLeft, rootHeight, scrollBottom, rootBottomTop,
+        hasInit = false, curState;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.offsetBottom && (offsetBottom = _options.offsetBottom);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroll && (scroll = _options.scroll);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $scrollTarget = $(scrollTarget);
+        isOverallScroller = window.isOverallScroller($scrollTarget[0]);
+        $scroll = $(scroll);
+      }
+      function preCalc() {
+        top();
+        rootHeight = $root.outerHeight();
+        rootTop = $root.offset().top + (isOverallScroller ? 0 :  $scrollTarget.scrollTop());
+        rootLeft = $root.offset().left;
+      }
+      function calc(needPreCalc) {
+        needPreCalc && preCalc();
+        scrollBottom = $scroll.outerHeight() - offsetBottom - rootHeight;
+        rootBottomTop = scrollBottom - rootTop;
+      }
+      function top() {
+        if (curState !== 'top') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: 0
+          });
+          curState = 'top';
+        }
+      }
+      function fixed() {
+        if (curState !== 'fixed') {
+          $root.addClass('fixed').css({
+            left: rootLeft + 'px',
+            top: 0
+          });
+          curState = 'fixed';
+        }
+      }
+      function bottom() {
+        if (curState !== 'bottom') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: rootBottomTop + 'px'
+          });
+          curState = 'bottom';
+        }
+      }
+      function setState() {
+        var scrollTop = $scrollTarget.scrollTop();
+        if (scrollTop >= rootTop && scrollTop <= scrollBottom) {
+          fixed();
+        } else if (scrollTop < rootTop) {
+          top();
+        } else {
+          bottom();
+        }
+      }
+      function init() {
+        if(!hasInit) {
+          var interval, timeout;
+          calc(true); setState();
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState();
+          });
+          $window.on('resize', function() {
+            disabled || (calc(true), setState());
+          });
+          hasInit = true;
+        }
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions,
+        refresh: function() {
+          calc(true, { animation: false }); setState();
+        }
+      };
+    }
+    $.fn.affix = affix;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function toc(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroller, $tocUl = $('<ul class="toc toc--ellipsis"></ul>'), $tocLi, $headings, $activeLast, $activeCur,
+        selectors = 'h1,h2,h3', container = 'body', scrollTarget = window, scroller = 'html, body', disabled = false,
+        headingsPos, scrolling = false, hasRendered = false, hasInit = false;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.selectors && (selectors = _options.selectors);
+        _options.container && (container = _options.container);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroller && (scroller = _options.scroller);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $headings = $(container).find(selectors).filter('[id]');
+        $scrollTarget = $(scrollTarget);
+        $scroller = $(scroller);
+      }
+      function calc() {
+        headingsPos = [];
+        $headings.each(function() {
+          headingsPos.push(Math.floor($(this).position().top));
+        });
+      }
+      function setState(element, disabled) {
+        var scrollTop = $scrollTarget.scrollTop(), i;
+        if (disabled || !headingsPos || headingsPos.length < 1) { return; }
+        if (element) {
+          $activeCur = element;
+        } else {
+          for (i = 0; i < headingsPos.length; i++) {
+            if (scrollTop >= headingsPos[i]) {
+              $activeCur = $tocLi.eq(i);
+            } else {
+              $activeCur || ($activeCur = $tocLi.eq(i));
+              break;
+            }
+          }
+        }
+        $activeLast && $activeLast.removeClass('active');
+        ($activeLast = $activeCur).addClass('active');
+      }
+      function render() {
+        if(!hasRendered) {
+          $root.append($tocUl);
+          $headings.each(function() {
+            var $this = $(this);
+            $tocUl.append($('<li></li>').addClass('toc-' + $this.prop('tagName').toLowerCase())
+              .append($('<a></a>').text($this.text()).attr('href', '#' + $this.prop('id'))));
+          });
+          $tocLi = $tocUl.children('li');
+          $tocUl.on('click', 'a', function(e) {
+            e.preventDefault();
+            var $this = $(this);
+            scrolling = true;
+            setState($this.parent());
+            $scroller.scrollToAnchor($this.attr('href'), 400, function() {
+              scrolling = false;
+            });
+          });
+        }
+        hasRendered = true;
+      }
+      function init() {
+        var interval, timeout;
+        if(!hasInit) {
+          render(); calc(); setState(null, scrolling);
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState(null, scrolling);
+          });
+          $window.on('resize', window.throttle(function() {
+            if (!disabled) {
+              render(); calc(); setState(null, scrolling);
+            }
+          }, 100));
+        }
+        hasInit = true;
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions
+      };
+    }
+    $.fn.toc = toc;
+  });
+})();
+/*(function () {
+
+})();*/
+</script><script>
+  /* toc must before affix, since affix need to konw toc' height. */(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  var TOC_SELECTOR = window.TEXT_VARIABLES.site.toc.selectors;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window);
+    var $articleContent = $('.js-article-content');
+    var $tocRoot = $('.js-toc-root'), $col2 = $('.js-col-aside');
+    var toc;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+    var hasToc = $articleContent.find(TOC_SELECTOR).length > 0;
+
+    function disabled() {
+      return $col2.css('display') === 'none' || !hasToc;
+    }
+
+    tocDisabled = disabled();
+
+    toc = $tocRoot.toc({
+      selectors: TOC_SELECTOR,
+      container: $articleContent,
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      tocDisabled = disabled();
+      toc && toc.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window), $pageFooter = $('.js-page-footer');
+    var $pageAside = $('.js-page-aside');
+    var affix;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+
+    affix = $pageAside.affix({
+      offsetBottom: $pageFooter.outerHeight(),
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      scroll: hasSidebar ? $('.js-page-main').children() : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      affix && affix.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+    window.pageAsideAffix = affix;
+  });
+})();
+</script><script type="text/x-mathjax-config">
+	var _config = { tex2jax: {
+		inlineMath: [['$','$'], ['\\(','\\)']]
+	}};MathJax.Hub.Config(_config);
+</script>
+<script type="text/javascript" src="https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
+<script>
+  window.Lazyload.js('https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js', function() {
+    mermaid.initialize({
+      startOnLoad: true
+    });
+    mermaid.init(undefined, '.language-mermaid');
+  });
+</script>
+
+    </div>
+    <script>(function () {
+  var $root = document.getElementsByClassName('root')[0];
+  if (window.hasEvent('touchstart')) {
+    $root.dataset.isTouch = true;
+    document.addEventListener('touchstart', function(){}, false);
+  }
+})();
+</script>
+  </body>
+</html>
+
