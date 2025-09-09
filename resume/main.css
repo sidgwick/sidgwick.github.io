@@ -548,6 +548,9 @@ ul.icons a {
 .position .details h4 a {
   font-weight: 500;
 }
+.position .content ol {
+  margin-left: -15px;
+}
 
 .tech-list {
   font-size: 1.3rem;
