@@ -1,0 +1,1648 @@
+<!DOCTYPE html><html lang="zh-CN">
+  <head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"><title>Python 官方文档扩展部分笔记 - 挚爱荒原</title>
+
+<meta name="description" content="概述文件名如果模块的名字是 spam, 那么我们的模块文件名字一般回叫做 spammodule.c, 但是对于一些比较长的模块名字, 也可以直接使用模块名来命名, 比如像 spammify.">
+<link rel="canonical" href="http://sidgwick.github.io/2017/05/18/python-official-extension-tutorial.html"><link rel="alternate" type="application/rss+xml" title="挚爱荒原" href="/feed.xml"><link rel="stylesheet" href="/assets/css/main.css"><link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css" ><!-- start custom head snippets -->
+
+<!-- end custom head snippets -->
+<script>(function() {
+  window.isArray = function(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  };
+  window.isString = function(val) {
+    return typeof val === 'string';
+  };
+
+  window.hasEvent = function(event) {
+    return 'on'.concat(event) in window.document;
+  };
+
+  window.isOverallScroller = function(node) {
+    return node === document.documentElement || node === document.body || node === window;
+  };
+
+  window.isFormElement = function(node) {
+    var tagName = node.tagName;
+    return tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA';
+  };
+
+  window.pageLoad = (function () {
+    var loaded = false, cbs = [];
+    window.addEventListener('load', function () {
+      var i;
+      loaded = true;
+      if (cbs.length > 0) {
+        for (i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+      }
+    });
+    return {
+      then: function(cb) {
+        cb && (loaded ? cb() : (cbs.push(cb)));
+      }
+    };
+  })();
+})();
+(function() {
+  window.throttle = function(func, wait) {
+    var args, result, thisArg, timeoutId, lastCalled = 0;
+
+    function trailingCall() {
+      lastCalled = new Date;
+      timeoutId = null;
+      result = func.apply(thisArg, args);
+    }
+    return function() {
+      var now = new Date,
+        remaining = wait - (now - lastCalled);
+
+      args = arguments;
+      thisArg = this;
+
+      if (remaining <= 0) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        lastCalled = now;
+        result = func.apply(thisArg, args);
+      } else if (!timeoutId) {
+        timeoutId = setTimeout(trailingCall, remaining);
+      }
+      return result;
+    };
+  };
+})();
+(function() {
+  var Set = (function() {
+    var add = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (data[i] === item) {
+          return;
+        }
+      }
+      this.size ++;
+      data.push(item);
+      return data;
+    };
+
+    var Set = function(data) {
+      this.size = 0;
+      this._data = [];
+      var i;
+      if (data.length > 0) {
+        for (i = 0; i < data.length; i++) {
+          add.call(this, data[i]);
+        }
+      }
+    };
+    Set.prototype.add = add;
+    Set.prototype.get = function(index) { return this._data[index]; };
+    Set.prototype.has = function(item) {
+      var i, data = this._data;
+      for (i = 0; i < data.length; i++) {
+        if (this.get(i) === item) {
+          return true;
+        }
+      }
+      return false;
+    };
+    Set.prototype.is = function(map) {
+      if (map._data.length !== this._data.length) { return false; }
+      var i, j, flag, tData = this._data, mData = map._data;
+      for (i = 0; i < tData.length; i++) {
+        for (flag = false, j = 0; j < mData.length; j++) {
+          if (tData[i] === mData[j]) {
+            flag = true;
+            break;
+          }
+        }
+        if (!flag) { return false; }
+      }
+      return true;
+    };
+    Set.prototype.values = function() {
+      return this._data;
+    };
+    return Set;
+  })();
+
+  window.Lazyload = (function(doc) {
+    var queue = {js: [], css: []}, sources = {js: {}, css: {}}, context = this;
+    var createNode = function(name, attrs) {
+      var node = doc.createElement(name), attr;
+      for (attr in attrs) {
+        if (attrs.hasOwnProperty(attr)) {
+          node.setAttribute(attr, attrs[attr]);
+        }
+      }
+      return node;
+    };
+    var end = function(type, url) {
+      var s, q, qi, cbs, i, j, cur, val, flag;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        s[url] = true;
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (cur.urls.has(url)) {
+            qi = cur, val = qi.urls.values();
+            qi && (cbs = qi.callbacks);
+            for (flag = true, j = 0; j < val.length; j++) {
+              cur = val[j];
+              if (!s[cur]) {
+                flag = false;
+              }
+            }
+            if (flag && cbs && cbs.length > 0) {
+              for (j = 0; j < cbs.length; j++) {
+                cbs[j].call(context);
+              }
+              qi.load = true;
+            }
+          }
+        }
+      }
+    };
+    var load = function(type, urls, callback) {
+      var s, q, qi, node, i, cur,
+        _urls = typeof urls === 'string' ? new Set([urls]) : new Set(urls), val, url;
+      if (type === 'js' || type ==='css') {
+        s = sources[type], q = queue[type];
+        for (i = 0; i < q.length; i++) {
+          cur = q[i];
+          if (_urls.is(cur.urls)) {
+            qi = cur;
+            break;
+          }
+        }
+        val = _urls.values();
+        if (qi) {
+          callback && (qi.load || qi.callbacks.push(callback));
+          callback && (qi.load && callback());
+        } else {
+          q.push({
+            urls: _urls,
+            callbacks: callback ? [callback] : [],
+            load: false
+          });
+          for (i = 0; i < val.length; i++) {
+            node = null, url = val[i];
+            if (s[url] === undefined) {
+              (type === 'js' ) && (node = createNode('script', { src: url }));
+              (type === 'css') && (node = createNode('link', { rel: 'stylesheet', href: url }));
+              if (node) {
+                node.onload = (function(type, url) {
+                  return function() {
+                    end(type, url);
+                  };
+                })(type, url);
+                (doc.head || doc.body).appendChild(node);
+                s[url] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+    return {
+      js: function(url, callback) {
+        load('js', url, callback);
+      },
+      css: function(url, callback) {
+        load('css', url, callback);
+      }
+    };
+  })(this.document);
+})();
+</script><script>
+  (function() {
+    var TEXT_VARIABLES = {
+      version: '2.2.6',
+      sources: {
+        font_awesome: 'https://cdn.bootcdn.net/ajax/libs/font-awesome/5.15.1/css/all.css',
+        jquery: 'https://cdn.bootcss.com/jquery/3.1.1/jquery.min.js',
+        leancloud_js_sdk: '//cdn.jsdelivr.net/npm/leancloud-storage@3.13.2/dist/av-min.js',
+        chart: 'https://cdn.bootcss.com/Chart.js/2.7.2/Chart.bundle.min.js',
+        gitalk: {
+          js: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.js',
+          css: 'https://cdn.bootcss.com/gitalk/1.2.2/gitalk.min.css'
+        },
+        valine: 'https://unpkg.com/valine/dist/Valine.min.js',
+        mathjax: 'https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML',
+        mermaid: 'https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js'
+      },
+      site: {
+        toc: {
+          selectors: 'h1,h2,h3'
+        }
+      },
+      paths: {
+        search_js: '/assets/search.js'
+      }
+    };
+    window.TEXT_VARIABLES = TEXT_VARIABLES;
+  })();
+</script>
+</head>
+  <body>
+    <div class="root" data-is-touch="false">
+      <div class="layout--page js-page-root"><div class="page__main js-page-main page__viewport has-aside cell cell--auto">
+
+      <div class="page__main-inner"><div class="page__header d-print-none"><header class="header"><div class="main">
+      <div class="header__title">
+        <div class="header__brand"><svg version="1.0" width="2848.000000pt" height="2848.000000pt" viewBox="0 0 2848.000000 2848.000000" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <defs></defs>
+  <g transform="translate(0.000000,2848.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
+    <path d="M10593 18855 c-7 -8 -13 -19 -13 -25 0 -5 -4 -10 -10 -10 -5 0 -10
+-6 -10 -14 0 -8 -3 -16 -7 -18 -5 -1 -42 -55 -83 -118 -41 -63 -77 -117 -80
+-120 -13 -13 -181 -269 -201 -307 -7 -13 -16 -23 -21 -23 -4 0 -8 -7 -8 -15 0
+-8 -4 -15 -10 -15 -5 0 -10 -6 -10 -13 0 -8 -9 -22 -20 -32 -11 -10 -20 -24
+-20 -32 0 -7 -4 -13 -9 -13 -5 0 -13 -9 -16 -20 -3 -11 -12 -26 -18 -32 -12
+-13 -68 -95 -77 -113 -13 -26 -246 -370 -252 -373 -5 -2 -8 -10 -8 -18 0 -8
+-4 -14 -10 -14 -5 0 -10 -7 -10 -15 0 -8 -3 -15 -8 -15 -4 0 -12 -9 -17 -19
+-12 -23 -225 -347 -240 -364 -6 -7 -42 -60 -80 -119 -39 -59 -75 -108 -81
+-108 -6 0 -29 8 -50 17 -22 9 -48 18 -58 20 -11 2 -24 7 -30 12 -9 7 -171 74
+-186 77 -3 0 -14 5 -25 9 -49 21 -811 327 -820 329 -5 2 -19 7 -30 11 -123 52
+-267 109 -295 118 -19 6 -37 14 -40 17 -3 3 -9 6 -15 7 -5 1 -32 10 -58 20
+-45 17 -49 17 -58 1 -5 -9 -16 -24 -24 -32 -8 -8 -15 -18 -15 -23 0 -4 -14
+-23 -31 -40 -16 -18 -26 -33 -22 -33 4 0 3 -4 -2 -8 -10 -7 -69 -81 -110 -138
+-20 -28 -98 -131 -112 -149 -5 -5 -19 -26 -33 -45 -13 -19 -27 -37 -30 -40 -3
+-3 -43 -57 -90 -120 -47 -63 -92 -120 -100 -127 -8 -7 -10 -13 -5 -13 6 0 6
+-3 0 -8 -6 -4 -29 -32 -53 -62 -23 -30 -45 -59 -50 -65 -4 -5 -18 -26 -32 -45
+-13 -19 -27 -37 -30 -40 -3 -3 -25 -32 -50 -65 -24 -33 -48 -64 -52 -70 -5 -5
+-47 -62 -94 -125 -80 -109 -102 -138 -139 -185 -8 -11 -65 -87 -127 -170 -62
+-82 -116 -154 -120 -160 -5 -5 -38 -49 -73 -97 -35 -48 -70 -95 -79 -104 -9
+-8 -16 -19 -16 -24 0 -5 -7 -16 -15 -24 -9 -8 -43 -53 -77 -98 -34 -46 -65
+-84 -70 -86 -4 -2 -8 -8 -8 -13 0 -10 -5 -17 -45 -63 -14 -16 -25 -32 -25 -35
+0 -3 -11 -19 -25 -34 -14 -15 -23 -27 -20 -27 2 0 -4 -10 -14 -22 -17 -20
+-159 -207 -216 -284 -11 -15 -25 -32 -30 -38 -6 -6 -28 -37 -49 -68 -22 -32
+-43 -58 -47 -58 -4 0 -10 -8 -14 -19 -3 -10 -16 -30 -28 -43 -12 -13 -31 -37
+-41 -53 -10 -17 -25 -37 -33 -45 -8 -8 -35 -44 -61 -80 -25 -36 -49 -67 -52
+-70 -3 -3 -37 -48 -75 -100 -38 -52 -72 -97 -75 -100 -3 -3 -44 -57 -90 -120
+-91 -123 -107 -144 -128 -166 -7 -8 -11 -14 -8 -14 3 0 -3 -10 -13 -22 -20
+-23 -183 -238 -211 -278 -8 -12 -23 -31 -32 -43 -10 -12 -56 -74 -103 -137
+-87 -118 -113 -152 -130 -173 -6 -6 -35 -46 -65 -87 -59 -80 -78 -105 -98
+-125 -6 -8 -12 -16 -12 -19 0 -5 -87 -123 -100 -136 -3 -3 -97 -129 -210 -280
+-113 -151 -213 -284 -222 -294 -10 -11 -18 -24 -18 -29 0 -7 -51 -3 -90 8 -8
+2 -31 6 -50 9 -19 3 -46 8 -60 11 -24 5 -38 8 -120 22 -19 3 -44 8 -55 10 -11
+2 -33 6 -50 9 -16 3 -88 16 -160 30 -126 24 -175 33 -219 38 -11 2 -28 6 -36
+9 -8 3 -37 9 -65 13 -27 4 -57 9 -65 11 -21 4 -58 11 -105 19 -22 3 -42 8 -44
+10 -2 2 -13 -6 -23 -19 -11 -12 -32 -36 -46 -52 -15 -17 -56 -63 -92 -104 -36
+-41 -76 -87 -90 -101 -14 -15 -50 -56 -80 -91 -30 -35 -69 -79 -87 -99 -18
+-19 -43 -47 -55 -61 -13 -15 -50 -57 -84 -95 -77 -87 -141 -160 -224 -254 -36
+-41 -76 -85 -88 -99 -13 -13 -37 -42 -53 -64 -16 -22 -29 -37 -29 -33 0 4 -12
+-7 -27 -26 -16 -18 -32 -38 -38 -44 -5 -6 -35 -39 -65 -74 -30 -34 -68 -77
+-85 -95 -16 -18 -43 -49 -60 -69 -16 -20 -46 -53 -65 -74 -19 -21 -62 -69 -95
+-106 -33 -38 -73 -84 -90 -102 -16 -17 -49 -54 -72 -80 -22 -27 -55 -65 -73
+-84 -18 -19 -51 -57 -73 -83 -50 -58 -63 -73 -144 -163 -34 -38 -70 -78 -80
+-90 -51 -60 -142 -162 -170 -190 -18 -18 -33 -35 -33 -39 0 -3 -10 -16 -22
+-29 -20 -20 -101 -110 -155 -173 -10 -11 -47 -53 -83 -93 -36 -40 -69 -78 -75
+-85 -5 -6 -25 -28 -44 -48 l-34 -36 69 4 c38 3 114 7 169 10 55 2 132 7 170
+10 39 3 104 7 147 9 42 2 81 6 86 10 6 3 13 2 17 -4 4 -6 12 -7 18 -3 7 4 32
+8 57 9 25 1 88 5 140 8 52 4 133 9 180 11 47 3 114 7 150 10 36 3 106 7 155 9
+50 2 126 7 170 10 174 13 340 23 477 30 36 2 71 7 77 10 6 4 11 2 11 -4 0 -6
+5 -8 11 -4 12 7 59 11 201 18 47 2 91 7 97 10 6 4 11 2 11 -4 0 -6 5 -8 13 -3
+6 4 41 8 77 10 36 1 94 4 130 7 36 3 112 8 170 11 58 3 128 7 155 9 28 3 97 7
+155 11 58 3 139 8 180 11 41 2 113 6 160 9 47 2 85 5 85 5 0 2 186 13 242 14
+29 0 53 5 53 9 0 4 8 3 19 -2 10 -6 21 -7 25 -3 4 3 28 8 54 9 57 2 194 10
+317 18 50 3 119 7 155 9 36 2 108 7 160 11 52 3 127 8 165 10 39 3 115 7 170
+11 55 3 127 7 160 9 33 2 60 4 60 5 0 1 12 3 28 4 15 1 27 -3 27 -9 0 -7 3 -7
+8 0 4 6 19 11 35 12 92 3 82 -6 86 81 1 42 4 97 6 122 10 124 16 188 21 215 3
+17 7 44 9 60 4 30 14 94 21 130 2 10 6 37 9 60 3 22 8 48 11 57 6 20 13 52 20
+97 5 32 9 49 18 89 42 180 59 250 76 312 12 41 23 86 26 100 3 14 11 45 19 70
+41 135 59 197 62 211 1 9 8 29 14 45 7 16 12 32 11 35 -1 4 13 46 29 95 17 49
+32 99 33 111 2 13 9 29 16 38 7 8 10 15 7 15 -3 0 15 57 40 128 25 70 46 132
+47 137 2 6 6 19 10 30 5 11 12 34 18 50 5 17 14 39 18 50 18 46 35 91 36 98 1
+4 3 9 4 12 1 3 3 8 5 13 1 4 5 14 8 22 4 8 19 49 35 90 l28 75 649 2 c358 2
+731 3 830 3 l180 0 78 158 c42 87 77 163 77 170 0 7 5 12 12 12 6 0 9 3 5 6
+-3 4 4 25 15 48 12 22 23 43 23 46 1 6 30 68 98 210 27 58 50 110 52 115 1 6
+16 42 34 80 19 39 45 95 58 125 14 30 44 96 67 145 23 50 43 93 44 97 1 5 16
+38 33 75 43 93 72 157 74 163 3 8 45 99 101 219 30 62 54 120 54 127 0 8 5 14
+10 14 6 0 10 5 10 11 0 6 23 58 50 115 28 57 50 108 50 114 0 5 4 10 10 10 5
+0 9 3 8 8 -2 11 10 38 127 277 59 121 112 223 117 226 5 3 9 9 8 13 -4 13 22
+66 32 66 5 0 7 4 3 9 -3 5 3 17 12 27 10 10 17 19 16 21 -3 4 30 76 38 83 3 3
+19 32 36 65 59 116 78 150 91 163 6 7 12 20 12 28 0 8 5 14 10 14 6 0 10 5 10
+10 0 13 132 234 142 238 4 2 8 7 8 12 0 12 71 118 150 225 36 50 74 101 83
+115 9 13 17 21 17 16 0 -4 17 14 39 41 101 126 258 236 358 250 36 5 44 10 50
+32 3 14 10 32 16 39 5 6 7 12 4 12 -3 0 2 24 13 54 10 30 16 57 13 60 -4 3 0
+6 7 6 7 0 11 3 7 6 -3 4 0 19 9 35 8 16 11 29 7 29 -4 0 -2 5 5 12 7 7 12 21
+12 32 0 12 7 30 15 40 8 11 15 26 15 33 0 7 11 35 24 62 13 27 27 62 30 77 4
+15 16 40 27 55 10 15 19 32 19 38 0 12 71 152 81 161 4 3 15 21 26 40 31 58
+75 125 84 128 5 2 9 10 9 18 0 8 7 17 15 20 8 4 15 10 15 14 0 24 148 171 220
+219 54 37 141 81 170 86 8 2 15 4 15 5 0 11 185 17 230 7 17 -4 46 -10 65 -13
+19 -3 38 -8 42 -11 5 -2 16 -6 27 -8 34 -6 307 -101 325 -113 6 -3 16 -7 21
+-8 6 -1 33 -12 60 -24 28 -12 68 -30 90 -40 103 -45 122 -53 149 -66 16 -8 35
+-14 43 -14 7 0 13 -4 13 -10 0 -5 4 -10 10 -10 20 0 542 -256 780 -382 47 -25
+128 -67 180 -94 52 -27 97 -51 100 -54 3 -3 28 -17 55 -32 82 -42 208 -110
+240 -129 17 -10 46 -26 65 -36 19 -9 62 -33 95 -52 33 -19 61 -33 61 -30 1 2
+10 -3 20 -11 11 -8 28 -20 39 -26 11 -6 43 -24 70 -39 28 -16 70 -39 95 -53
+24 -13 57 -33 72 -44 15 -10 28 -16 28 -11 0 4 4 4 8 -2 4 -5 16 -15 27 -21
+29 -16 104 -58 150 -84 22 -13 60 -34 84 -48 25 -14 68 -38 95 -55 28 -16 71
+-41 96 -55 25 -13 52 -31 61 -38 8 -8 19 -14 23 -14 4 0 84 -45 177 -100 93
+-55 174 -100 179 -100 6 0 10 -4 10 -9 0 -5 8 -11 18 -15 9 -3 24 -10 32 -16
+14 -9 186 -111 255 -150 71 -41 110 -64 115 -70 3 -3 25 -16 50 -29 25 -13 52
+-29 60 -36 8 -7 22 -15 30 -19 8 -4 24 -12 35 -19 11 -7 88 -52 170 -102 83
+-49 152 -93 153 -97 2 -5 8 -8 13 -8 12 0 262 -152 271 -165 4 -5 8 -6 8 -2 0
+4 6 3 13 -3 6 -6 82 -53 167 -105 85 -52 164 -101 175 -110 10 -8 23 -15 28
+-15 4 0 35 -18 67 -40 32 -22 64 -40 69 -40 6 0 11 -4 11 -10 0 -5 5 -10 11
+-10 6 0 25 -11 43 -25 18 -14 38 -25 44 -25 6 0 16 -9 22 -20 6 -11 7 -20 2
+-20 -6 0 -12 -8 -15 -17 -4 -10 -26 -45 -50 -78 -24 -33 -79 -112 -122 -175
+-75 -111 -104 -152 -125 -177 -5 -7 -10 -17 -10 -23 0 -5 -3 -10 -8 -10 -4 0
+-12 -9 -17 -20 -13 -26 -176 -264 -186 -270 -4 -3 -15 -19 -25 -37 -11 -17
+-37 -57 -59 -90 -22 -32 -81 -116 -130 -188 -49 -71 -93 -131 -97 -133 -4 -2
+-8 -8 -8 -13 0 -5 -12 -27 -27 -48 -16 -21 -35 -49 -43 -61 -8 -12 -30 -43
+-48 -69 -32 -45 -300 -436 -384 -559 -24 -35 -54 -77 -66 -93 -13 -16 -20 -29
+-15 -29 4 0 3 -4 -4 -8 -11 -7 -61 -78 -149 -212 -20 -30 -41 -56 -45 -58 -5
+-2 -9 -9 -9 -16 0 -7 -9 -21 -20 -31 -11 -10 -20 -24 -20 -31 0 -7 -3 -14 -8
+-16 -4 -2 -25 -30 -47 -63 -21 -33 -41 -62 -44 -65 -3 -3 -30 -41 -60 -85 -73
+-107 -168 -246 -222 -323 -24 -35 -48 -71 -54 -80 -5 -9 -12 -19 -15 -22 -3
+-3 -14 -18 -26 -35 -60 -87 -151 -220 -164 -240 -24 -35 -81 -119 -182 -265
+-51 -75 -124 -182 -163 -239 -38 -57 -75 -109 -82 -116 -7 -7 -9 -15 -6 -19 4
+-3 2 -6 -4 -6 -5 0 -25 -24 -43 -52 -19 -29 -38 -54 -42 -56 -4 -2 -8 -8 -8
+-13 0 -9 -38 -68 -51 -79 -3 -3 -18 -23 -32 -45 -14 -22 -52 -78 -84 -125 -32
+-47 -87 -128 -123 -180 -35 -52 -67 -97 -70 -100 -9 -8 -84 -119 -95 -141 -5
+-10 -13 -19 -17 -19 -5 0 -8 -7 -8 -15 0 -8 -4 -15 -9 -15 -5 0 -12 -8 -15
+-18 -4 -10 -14 -27 -24 -38 -9 -11 -23 -29 -30 -40 -42 -64 -53 -81 -67 -100
+-43 -58 -143 -209 -140 -212 3 -3 276 129 285 138 3 3 10 6 17 7 7 2 58 25
+115 52 130 62 189 89 308 141 52 23 101 46 108 52 6 6 12 8 12 5 0 -3 50 16
+110 43 61 26 110 46 110 43 0 -2 12 5 26 16 14 11 32 17 40 14 8 -3 14 1 14 8
+0 7 3 10 6 7 3 -4 24 2 47 12 68 29 117 49 120 48 1 -1 13 5 27 12 14 8 30 15
+35 16 6 1 55 21 110 43 55 22 103 41 106 41 4 0 24 8 45 17 22 9 48 18 58 20
+11 2 24 7 30 12 9 7 82 34 96 36 5 0 60 21 95 35 23 10 225 81 240 84 6 2 17
+6 25 9 8 3 87 29 175 57 88 29 185 60 216 70 31 11 68 21 83 24 14 2 31 8 38
+13 7 4 18 8 23 9 12 2 127 34 247 68 47 13 89 22 92 18 3 -3 6 0 6 7 0 7 4 9
+10 6 5 -3 18 -2 27 4 10 5 32 11 48 14 17 3 37 8 45 11 8 3 26 8 40 10 14 3
+63 14 110 26 47 12 137 32 200 46 63 14 138 35 165 48 48 22 125 87 125 106 0
+5 6 15 13 22 11 10 47 101 52 128 1 3 5 23 9 45 16 80 17 104 20 318 2 120 -1
+220 -6 223 -4 3 -6 10 -3 15 4 5 8 82 10 172 2 89 6 173 9 187 19 105 30 144
+61 207 34 69 111 153 140 153 7 0 18 6 24 14 10 12 88 32 164 42 41 5 100 14
+124 18 11 3 36 7 54 10 19 3 44 8 55 10 12 2 37 7 56 10 19 3 72 14 119 25 47
+11 98 23 114 26 41 8 60 13 60 15 0 1 9 3 20 5 11 2 31 6 45 10 14 3 36 8 50
+11 14 2 36 7 50 11 14 3 30 7 35 9 6 1 46 11 91 23 45 11 92 23 105 25 13 3
+25 5 27 7 2 2 1 1 57 14 22 5 42 9 45 10 17 5 59 16 85 20 17 4 35 7 40 9 16
+4 89 19 105 21 8 1 26 5 40 9 14 3 41 8 60 10 19 3 35 5 35 6 0 1 36 4 80 6
+75 5 82 7 113 39 17 18 32 37 32 42 0 4 7 21 15 36 8 15 31 78 51 140 33 104
+43 137 49 177 1 8 5 22 8 30 13 36 66 269 72 315 1 11 5 27 8 35 6 16 62 291
+83 410 4 19 9 44 11 55 7 36 12 59 17 85 2 14 7 36 10 50 3 14 8 36 10 50 3
+14 7 35 10 46 2 12 7 39 10 60 4 22 8 46 11 54 2 8 6 26 9 40 15 88 17 100 51
+260 14 69 28 134 30 145 3 11 7 31 10 45 3 14 7 39 9 57 3 18 7 36 9 40 3 4 8
+25 11 46 7 45 25 125 33 147 3 8 7 29 9 45 3 17 11 53 18 80 8 28 20 77 26
+110 7 33 16 65 21 71 5 6 7 13 4 16 -3 2 9 54 26 114 17 60 32 116 34 124 20
+88 111 357 127 378 6 6 7 12 3 12 -4 0 0 11 9 25 9 14 14 25 11 25 -3 0 13 35
+36 78 23 42 48 88 55 102 20 38 88 110 120 127 42 22 94 23 135 2 42 -21 42
+-21 124 -114 113 -128 283 -311 393 -424 124 -129 362 -369 362 -367 0 1 58
+-55 129 -124 71 -69 177 -170 236 -225 114 -107 124 -116 231 -213 38 -35 87
+-80 109 -100 22 -20 76 -68 120 -107 44 -38 91 -81 105 -95 14 -14 39 -35 55
+-48 17 -13 46 -38 65 -55 19 -18 69 -61 110 -97 41 -36 80 -70 86 -76 6 -5 31
+-26 54 -45 23 -18 52 -43 64 -55 11 -11 46 -40 76 -65 30 -24 69 -57 86 -74
+18 -16 44 -39 58 -49 15 -11 37 -29 50 -40 21 -19 89 -76 140 -118 51 -41 171
+-143 176 -148 3 -4 14 -13 26 -21 28 -19 113 -89 141 -116 13 -12 23 -19 23
+-15 0 4 4 2 8 -3 4 -6 32 -30 62 -55 30 -25 58 -49 62 -55 4 -5 8 -6 8 -2 0 4
+18 -10 41 -33 22 -22 44 -40 47 -40 4 0 30 -20 57 -45 28 -24 53 -45 56 -45 3
+0 17 -10 31 -22 13 -13 37 -32 52 -43 15 -11 41 -31 56 -45 15 -14 40 -34 55
+-44 14 -11 34 -27 44 -35 10 -9 33 -27 51 -41 55 -42 95 -74 102 -85 4 -5 8
+-7 8 -3 0 4 11 -3 24 -15 26 -24 38 -33 161 -129 44 -35 82 -65 85 -68 3 -3
+43 -34 90 -70 99 -76 98 -75 172 -134 32 -25 62 -46 67 -46 5 0 11 -4 13 -8 3
+-7 61 -54 192 -155 16 -12 43 -34 61 -49 18 -16 37 -28 43 -28 6 0 12 -4 14
+-9 2 -4 41 -37 88 -71 47 -35 87 -66 90 -70 3 -3 50 -39 105 -80 114 -86 126
+-95 170 -132 18 -16 37 -28 43 -28 6 0 12 -4 14 -8 2 -4 68 -57 148 -117 80
+-61 147 -112 150 -115 3 -3 68 -52 145 -110 77 -57 142 -107 145 -110 3 -3 79
+-61 170 -129 91 -68 179 -135 195 -148 17 -13 35 -27 40 -31 11 -8 215 -162
+230 -174 6 -4 35 -27 65 -51 30 -23 80 -61 110 -84 30 -22 66 -50 79 -62 13
+-11 27 -21 30 -21 3 0 18 -10 31 -22 14 -13 82 -66 150 -118 69 -52 132 -100
+140 -107 44 -35 141 -111 170 -133 65 -49 165 -128 246 -195 13 -11 36 -29 50
+-40 14 -11 38 -30 52 -42 15 -12 86 -70 157 -128 72 -59 144 -119 161 -134 17
+-15 55 -47 84 -72 28 -24 62 -53 74 -64 12 -11 58 -51 101 -90 43 -38 106 -97
+140 -130 93 -91 103 -96 49 -24 -27 37 -55 75 -62 85 -29 44 -112 160 -122
+171 -5 7 -10 16 -10 22 0 5 -4 11 -8 13 -4 2 -28 32 -52 68 -64 93 -207 293
+-219 307 -6 7 -11 17 -11 22 0 6 -6 14 -14 18 -7 4 -18 18 -25 30 -11 22 -110
+163 -136 195 -7 9 -22 29 -32 45 -17 27 -95 138 -111 158 -4 6 -23 33 -42 60
+-19 28 -37 52 -42 53 -4 2 -8 8 -8 14 0 8 -44 73 -60 88 -3 3 -26 35 -50 72
+-25 38 -49 68 -53 68 -5 0 -5 5 -2 10 3 6 1 10 -4 10 -6 0 -11 5 -11 10 0 6
+-11 23 -24 38 -14 15 -25 31 -25 36 1 5 -3 12 -8 15 -8 5 -58 74 -155 213 -18
+26 -37 47 -41 48 -5 0 -5 5 -2 10 3 6 -1 13 -9 16 -9 3 -16 11 -16 18 0 6 -18
+34 -40 61 -22 28 -40 55 -40 62 0 6 -4 13 -9 15 -8 3 -145 190 -167 228 -12
+22 -42 64 -66 92 -10 12 -18 25 -18 30 0 4 -8 16 -17 27 -10 10 -34 42 -53 71
+-19 29 -43 60 -52 71 -9 10 -24 32 -33 48 -8 17 -20 31 -25 31 -6 0 -10 4 -10
+10 0 5 -21 40 -47 77 -67 96 -280 396 -290 408 -4 6 -33 46 -63 90 -30 44 -58
+81 -62 83 -4 2 -8 10 -8 17 0 7 -4 15 -8 17 -5 2 -36 44 -71 93 -63 91 -85
+123 -291 414 -63 89 -119 170 -125 179 -5 9 -12 19 -15 22 -3 3 -17 21 -30 40
+-13 19 -27 37 -30 40 -8 8 -70 100 -70 105 0 3 -12 19 -27 36 -16 17 -26 32
+-23 32 2 1 -3 11 -13 22 -14 18 -75 102 -137 190 -11 17 -38 53 -58 82 -20 28
+-43 59 -50 70 -7 10 -48 69 -92 131 -44 62 -80 117 -80 122 0 6 -4 10 -8 10
+-5 0 -27 28 -50 63 -24 34 -68 98 -99 142 -31 44 -68 96 -82 116 -14 20 -63
+89 -108 153 -46 63 -83 120 -83 126 0 25 -7 16 -223 -274 -12 -16 -34 -45 -50
+-65 -15 -20 -36 -47 -46 -61 -10 -14 -49 -66 -87 -117 -38 -50 -78 -104 -89
+-119 -11 -16 -28 -36 -37 -46 -10 -10 -18 -20 -18 -23 0 -4 -210 -287 -238
+-320 -4 -5 -19 -26 -32 -45 -14 -19 -27 -37 -30 -40 -3 -3 -39 -49 -79 -102
+-40 -54 -76 -98 -80 -98 -3 0 -19 23 -36 50 -16 27 -33 50 -37 50 -5 0 -8 5
+-8 10 0 10 -38 69 -51 80 -5 4 -38 53 -74 109 -5 8 -15 21 -22 28 -7 7 -22 31
+-34 53 -13 22 -26 40 -31 40 -4 0 -8 6 -8 14 0 8 -4 16 -8 18 -5 2 -50 64
+-100 138 -51 73 -101 144 -112 157 -11 13 -17 23 -14 23 6 0 -48 74 -58 78 -5
+2 -8 10 -8 17 0 8 -6 20 -13 27 -7 7 -44 58 -82 113 -38 55 -73 102 -77 103
+-4 2 -8 10 -8 18 0 8 -4 14 -10 14 -5 0 -10 7 -10 15 0 8 -4 15 -10 15 -5 0
+-10 5 -10 11 0 6 -6 16 -12 24 -15 15 -124 173 -151 217 -9 16 -25 38 -35 49
+-11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 6 0 6 3 0 8 -17
+11 -175 239 -175 251 0 6 -3 11 -8 11 -4 0 -22 21 -39 48 -30 44 -139 202
+-270 390 -32 46 -62 91 -68 100 -10 16 -20 29 -42 56 -7 8 -13 19 -13 23 0 4
+-12 21 -26 38 -14 16 -35 45 -47 65 -12 19 -27 41 -34 48 -7 7 -13 20 -13 28
+0 8 -4 14 -8 14 -4 0 -32 36 -61 80 -30 44 -58 80 -64 80 -6 0 -8 3 -4 6 6 6
+-81 136 -95 142 -5 2 -8 8 -8 12 0 11 -162 244 -172 248 -5 2 -8 8 -8 13 0 9
+-37 67 -51 79 -3 3 -34 48 -70 100 -35 52 -67 97 -71 98 -5 2 -8 8 -8 13 0 6
+-8 19 -18 30 -11 10 -25 32 -33 47 -8 15 -21 32 -29 39 -8 7 -10 13 -5 13 7 0
+7 3 0 8 -15 11 -115 151 -115 161 0 5 -3 11 -7 13 -5 2 -33 39 -63 83 -30 44
+-58 85 -62 90 -26 32 -88 127 -88 135 0 6 -3 10 -7 10 -5 0 -30 34 -57 74
+l-49 74 -26 -16 c-26 -15 -72 -45 -259 -166 -56 -36 -107 -66 -112 -66 -4 0
+-10 -4 -12 -8 -1 -4 -32 -26 -68 -47 -36 -21 -66 -43 -68 -47 -2 -4 -9 -8 -16
+-8 -6 0 -21 -7 -31 -15 -35 -27 -158 -105 -166 -105 -4 0 -14 -6 -21 -12 -22
+-21 -127 -88 -138 -88 -5 0 -10 -4 -10 -9 0 -5 -13 -14 -30 -21 -16 -7 -30
+-16 -30 -21 0 -5 -6 -9 -14 -9 -8 0 -21 -6 -28 -13 -7 -7 -38 -28 -68 -47 -30
+-19 -58 -39 -62 -45 -4 -5 -8 -6 -8 -2 0 4 -15 -3 -33 -17 -19 -15 -39 -26
+-45 -26 -7 0 -12 -4 -12 -8 0 -5 -18 -17 -40 -28 -22 -10 -40 -22 -40 -26 0
+-5 -7 -8 -15 -8 -8 0 -15 -4 -15 -9 0 -5 -16 -17 -36 -27 -20 -11 -44 -23 -55
+-29 -10 -5 -19 -13 -19 -17 0 -5 -7 -8 -15 -8 -8 0 -15 -4 -15 -10 0 -5 -4
+-10 -10 -10 -5 0 -39 -19 -74 -42 -89 -59 -417 -268 -481 -308 -14 -8 -113
+-71 -220 -140 -107 -69 -205 -130 -218 -137 -12 -7 -29 -17 -37 -23 -8 -6 -51
+-33 -95 -62 -44 -28 -92 -59 -107 -69 -15 -11 -32 -19 -38 -19 -5 0 -10 -5
+-10 -10 0 -6 -12 -15 -26 -20 -14 -6 -47 -25 -72 -43 -51 -34 -78 -52 -102
+-64 -8 -4 -19 -11 -25 -15 -5 -5 -39 -27 -75 -50 -36 -23 -94 -60 -130 -83
+-36 -23 -108 -68 -160 -100 -52 -32 -97 -62 -100 -65 -3 -4 -30 -22 -60 -39
+-30 -17 -64 -38 -76 -46 -18 -14 -24 -12 -65 17 -24 18 -45 36 -47 40 -2 5 -8
+8 -13 8 -5 0 -33 18 -62 40 -65 50 -55 43 -162 120 -49 35 -94 68 -100 72 -9
+8 -90 67 -140 102 -92 66 -151 111 -153 118 -2 4 -8 8 -13 8 -8 0 -111 72
+-129 90 -3 3 -12 10 -22 15 -22 14 -302 217 -308 225 -3 3 -18 14 -35 24 -16
+11 -34 23 -40 28 -61 49 -116 88 -124 88 -5 0 -11 4 -13 8 -1 4 -59 48 -128
+97 -69 49 -127 92 -130 95 -3 4 -26 21 -52 38 -25 18 -54 39 -62 48 -9 8 -16
+12 -16 7 0 -4 -4 -3 -8 3 -4 6 -50 42 -102 79 -52 38 -99 72 -105 77 -5 4 -46
+34 -90 65 -44 32 -81 61 -83 65 -2 4 -8 8 -14 8 -6 0 -24 11 -42 25 -45 36
+-43 35 -133 100 -46 32 -83 62 -83 67 0 4 -5 8 -11 8 -9 0 -82 49 -124 83 -5
+4 -41 30 -80 58 -38 27 -77 55 -85 62 -8 7 -56 41 -105 77 -50 35 -99 72 -109
+82 -11 10 -25 18 -32 18 -7 0 -14 4 -16 8 -3 7 -529 394 -566 417 -9 6 -19 13
+-22 16 -24 28 -44 25 -108 -19 -37 -24 -70 -49 -73 -54 -3 -5 -8 -9 -10 -7 -4
+3 -90 -51 -99 -62 -3 -3 -10 -8 -15 -10 -19 -8 -460 -304 -463 -311 -2 -5 -7
+-8 -12 -8 -9 0 -222 -140 -230 -152 -8 -10 -54 -1 -58 12 -2 5 -7 10 -12 10
+-5 0 -46 23 -92 51 -46 29 -96 59 -113 69 -16 10 -66 40 -110 67 -44 27 -87
+52 -95 56 -8 4 -28 16 -45 27 -16 11 -37 23 -45 27 -28 15 -115 67 -120 73 -3
+3 -16 11 -30 18 -36 17 -64 35 -72 47 -4 6 -8 6 -8 2 0 -4 -15 2 -32 15 -46
+32 -67 45 -115 69 -24 12 -43 25 -43 30 0 5 -5 9 -10 9 -6 0 -35 15 -65 34
+-29 19 -55 33 -57 30 -3 -2 -13 5 -23 16 -10 11 -21 20 -25 20 -4 0 -67 36
+-139 80 -73 44 -136 80 -142 80 -5 0 -9 4 -9 9 0 5 -8 11 -17 15 -10 3 -38 19
+-63 34 -116 73 -134 81 -147 67z"></path>
+  </g>
+</svg><a title="宋志刚(Sidgwick)的个人博客, 主要是一些技术记录和分享. 不写博客的技术人员不 是好的技术人员. 工作之余写点小博客, 记录学习中遇到的点点滴滴, 方便自己以后 查看, 也方便和我遇到一样问题的人.
+" href="/">挚爱荒原</a></div><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></div><nav class="navigation">
+        <ul><li class="navigation__item"><a href="/archive.html">归档</a></li><li class="navigation__item"><a href="/about.html">关于</a></li><li><button class="button button--secondary button--circle search-button js-search-toggle"><i class="fas fa-search"></i></button></li></ul>
+      </nav></div>
+  </header>
+</div><div class="page__content"><div class ="main"><div class="grid grid--reverse">
+
+              <div class="col-aside d-print-none js-col-aside"><aside class="page__aside js-page-aside"><div class="toc-aside js-toc-root"></div>
+</aside></div>
+
+              <div class="col-main cell cell--auto"><!-- start custom main top snippet -->
+
+<!-- end custom main top snippet -->
+<article itemscope itemtype="http://schema.org/Article"><div class="article__header"><header><h1>Python 官方文档扩展部分笔记</h1></header><span class="split-space">&nbsp;</span>
+          <a class="edit-on-github"
+            title="在 Github 上修改"
+            href="https://github.com/sidgwick/sidgwick.github.io/tree/master/_posts/python/cpython/2017-05-18-python-official-extension-tutorial.md">
+            <i class="far fa-edit"></i></a></div><meta itemprop="headline" content="Python 官方文档扩展部分笔记"><div class="article__info clearfix"><ul class="left-col menu"><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=python">python</a>
+            </li><li>
+              <a class="button button--secondary button--pill button--sm"
+                href="/archive.html?tag=cpython">cpython</a>
+            </li></ul><ul class="right-col menu"><li><i class="far fa-calendar-alt"></i> <span>2017年 05月18日</span>
+            </li></ul></div><meta itemprop="author" content="Zhigang Song"/><meta itemprop="datePublished" content="2017-05-18T20:14:04+08:00">
+    <meta itemprop="keywords" content="python,cpython"><div class="js-article-content"><div class="layout--article"><!-- start custom article top snippet -->
+
+<!-- end custom article top snippet -->
+<div class="article__content" itemprop="articleBody"><h2 id="概述">概述</h2>
+
+<h3 id="文件名">文件名</h3>
+
+<p>如果模块的名字是 <code class="language-plaintext highlighter-rouge">spam</code>, 那么我们的模块文件名字一般回叫做 <code class="language-plaintext highlighter-rouge">spammodule.c</code>, 但是对于一些比较长的模块名字, 也可以直接使用模块名来命名, 比如像 <code class="language-plaintext highlighter-rouge">spammify</code>.</p>
+
+<!--more-->
+
+<h3 id="头文件">头文件</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;Python.h&gt;</span><span class="cp">
+</span></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">Python.h</code> 文件包含了为 python 写扩展必要的一些数据结构和定义.</p>
+
+<p>在 <code class="language-plaintext highlighter-rouge">Python.h</code> 里面除了标准库符号之外, 定义的所有用户可见的符号, 都会以 <code class="language-plaintext highlighter-rouge">Py</code> 或者 <code class="language-plaintext highlighter-rouge">PY</code> 开头. 由于在 Python 解释器里面广泛的使用也为了方便起见, <code class="language-plaintext highlighter-rouge">Python.h</code> 也包含了一些标准库文件. <code class="language-plaintext highlighter-rouge">Python.h</code> 做了一些可能会影响标准库的定义, 所以应该在其他标准库引入之前就引入.</p>
+
+<blockquote>
+  <p>Python.h 引入的几个标准库文件: <stdio.h>, <string.h>, <errno.h>, and <stdlib.h></stdlib.h></errno.h></string.h></stdio.h></p>
+</blockquote>
+
+<p>如果上述的一些文件在系统上不存在, 那么 <code class="language-plaintext highlighter-rouge">Python.h</code> 会直接自己声明 <code class="language-plaintext highlighter-rouge">malloc()</code>, <code class="language-plaintext highlighter-rouge">free()</code> 以及 <code class="language-plaintext highlighter-rouge">realloc()</code> 函数.</p>
+
+<h2 id="创建一个可以调用的函数">创建一个可以调用的函数</h2>
+
+<p>接下来我们写一个可以在 Python 里面调用的函数. Python 代码为: <code class="language-plaintext highlighter-rouge">spam.system("ls -al")</code>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+<span class="nf">spam_system</span><span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="n">self</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="kt">char</span> <span class="o">*</span><span class="n">command</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">status</span><span class="p">;</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"s:system"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">command</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">status</span> <span class="o">=</span> <span class="n">system</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+
+  <span class="k">return</span> <span class="n">Py_BuildValue</span><span class="p">(</span><span class="s">"i"</span><span class="p">,</span> <span class="n">status</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这个就是 Python 调用的 C 函数. 它总是接受两个参数, 一般叫做 <code class="language-plaintext highlighter-rouge">self</code> 和 <code class="language-plaintext highlighter-rouge">args</code>.</p>
+
+<p><code class="language-plaintext highlighter-rouge">self</code> 参数对于在模块顶层的函数来说, 它指向模块对象. 对于方法函数来说,, 它指向的是对象实例.</p>
+
+<p><code class="language-plaintext highlighter-rouge">args</code> 参数, 指向的是一个 Python 元组对象, 每个元组项目, 都会对应一个调用的参数, 参数都是 Python 对象, 所以为了在 C 代码里使用他们, 我们要把他们转化成为 C 值. <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数用于检测参数类型, 并且把他们转化为 C 值. 它使用一个模板字符串来决定每个参数的类型, 以及之后接受的用于保存值的 C 参数类型. 关于这个函数, 后面有更详细的描述</p>
+
+<p><code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 在所有参数无误, 并且都被正确的转化为对应的 C 值的时候, 会返回非 0. 在参数类型有误的情况下会返回 0, 在这种情况中, 它也会触发一个异常, 所以调用函数立即返回 <code class="language-plaintext highlighter-rouge">NULL</code>. (在 Python 解释器收到 <code class="language-plaintext highlighter-rouge">NULL</code> 的时候, 它就知道有一个异常被抛出了)</p>
+
+<h2 id="插曲-错误和异常">插曲: 错误和异常</h2>
+
+<p>一个很重要的贯穿整个 Python 解释器的约定是: 当一个函数执行失败, 它应当设定一个异常条件并且返回一个错误值(通常是 <code class="language-plaintext highlighter-rouge">NULL</code>). 异常保存在一个解释器的静态全局变量里面, 当这个变量是 <code class="language-plaintext highlighter-rouge">NULL</code> 标识没有异常发生, 第二个全局变量是保存异常”相关值”的(the second argument to raise, 我没理解是 raise 的那个参数…). 第三个全局变量是, 保存 Python 代码里面的异常调用栈. 这三个变量, 相当于 Python 代码执行 <code class="language-plaintext highlighter-rouge">sys.exc_info()</code>. 理解这些变量对理解如何传递错误是很重要的.</p>
+
+<p>Python 的 API 定义了一系列的函数, 来定义异常类型.</p>
+
+<p>最常见的就是 <code class="language-plaintext highlighter-rouge">PyErr_SetString</code> 函数, 它的参数是异常对象和 C 字符串, 异常对象总是一个预定义好的对象, 比如: <code class="language-plaintext highlighter-rouge">PyExc_ZeroDivisionError</code>, C 字符串用来说明发生错误的原因, 并且会被转化为 Python 字符串, 保存在异常”相关值”那个变量里面.</p>
+
+<p>另一个有用的函数是 <code class="language-plaintext highlighter-rouge">PyErr_SetFromErron</code>, 它接受一个异常参数, 然后通过全局的 <code class="language-plaintext highlighter-rouge">errno</code> 变量来构造”相关值”. 最通用的函数是 <code class="language-plaintext highlighter-rouge">PyErr_SetObject</code>, 他接受两个参数, 一个异常加一个相关值, 对这些函数传入的参数, 不需要对他们施行 <code class="language-plaintext highlighter-rouge">Py_INCREF</code> 操作.</p>
+
+<p>可以使用 <code class="language-plaintext highlighter-rouge">PyErr_Occurred()</code> 函数来执行非破坏性的检查操作, 这个函数返回当前的异常对象, 如果没有异常发生, 他就返回 <code class="language-plaintext highlighter-rouge">NULL</code>. 因为多数情况下, 你可以从返回值来判断是不是有异常发生, 所以你基本上不怎么需要调用这个函数.</p>
+
+<p>当一个函数 <code class="language-plaintext highlighter-rouge">f</code> 调用了 <code class="language-plaintext highlighter-rouge">g</code>, 而 <code class="language-plaintext highlighter-rouge">g</code> 发生了异常, <code class="language-plaintext highlighter-rouge">f</code> 也应当返回一个错误值(通常情况是 <code class="language-plaintext highlighter-rouge">NULL</code> 或者 -1). 它不能调用 <code class="language-plaintext highlighter-rouge">PyErr_*()</code> 函数, 因为 <code class="language-plaintext highlighter-rouge">g</code> 已经调用过了. 调用 <code class="language-plaintext highlighter-rouge">f</code> 的函数, 也应该向它的调用函数返回一个错误标记, 一样也不需要调用 <code class="language-plaintext highlighter-rouge">PyErr_*()</code>, 如此一致往前. 错误的详细信息已经在第一次探测到他的地方被详细报告了. 当错误到达 Python 解释器主循环的时候, 就会打断当前的执行代码, 并且尝试着查找由 Python 程序员编写的异常处理.</p>
+
+<p>有些情况下, 模块可以调用 <code class="language-plaintext highlighter-rouge">PyErr_*()</code> 来给出更详细的错误信息, 这种情况是可以的. 但是作为一个通用的规则, 这个调用不是必需的, 并且可能会导致造成错误的信息丢失, 因为很多操作会因为各种原因导致失败</p>
+
+<p>要忽略一个失败函数调用产生的异常, 我们必须显式的调用 <code class="language-plaintext highlighter-rouge">PyErr_Clear</code> 函数来清除异常数据. C 代码里面, 唯一需要调用这个函数的情况是, 当我们不希望向 Python
+解释器传递这个异常, 而是打算自己处理这个异常(比方说, 尝试其他东西, 或者直接忽略掉异常)</p>
+
+<p>每次调用 <code class="language-plaintext highlighter-rouge">malloc()</code> 失败, 都应该转化成一个异常, 直接调用 <code class="language-plaintext highlighter-rouge">malloc()</code> 或者 <code class="language-plaintext highlighter-rouge">realloc()</code> 的函数, 必须调用 <code class="language-plaintext highlighter-rouge">PyErr_NoMemory()</code> 并返回失败. 所有的对象创建函数(比如: <code class="language-plaintext highlighter-rouge">PyLong_FromLong</code>)都已经做了这种操作, 所以这个提醒是给那些直接调用内存分配函数的地方的.</p>
+
+<p>注意, <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数和类似的函数, 这些函数会犯回一个正数或者 <code class="language-plaintext highlighter-rouge">0</code> 来标识执行成功, 返回 <code class="language-plaintext highlighter-rouge">-1</code> 来表示执行失败. 就像 Unix 系统调用那样.</p>
+
+<p>最后, 再犯会错误值的时候, 要小心垃圾清理工作(通过对对象调用<code class="language-plaintext highlighter-rouge">Py_XDECREF</code> 或者 <code class="language-plaintext highlighter-rouge">Py_DECREF</code>)</p>
+
+<p>应该抛出那个异常, 完全有你来决定, 对所有的内置异常类型都有对应的预定义 C 对象, 比如像 <code class="language-plaintext highlighter-rouge">PyExc_ZeroDivisionError</code>, 这种你可以直接使用. 当然你应该选择明确的异常类型, 不要把 <code class="language-plaintext highlighter-rouge">PyExc_TypeError</code> 用来标识文件无法打开, 那明明就是 <code class="language-plaintext highlighter-rouge">PyExc_IOError</code> 嘛. 如果你的传参不对, <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数一般会抛出 <code class="language-plaintext highlighter-rouge">PyExc_TypeError</code>. 如果你的参数值, 应该是莫个范围, 或者要满足某些条件, <code class="language-plaintext highlighter-rouge">PyExc_ValueError</code> 会更合适.</p>
+
+<p>你也可以给你的模块定义一个新的异常, 可以通过在文件开始声明一个静态的对象变量来实现:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">SpamError</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>之后在模块初始化函数里面, 用一个异常对象初始化它(现在我们先忽略错误检查).</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PyMODINIT_FUNC</span>
+<span class="nf">PyInit_spam</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="n">PyObject</span> <span class="o">*</span><span class="n">m</span><span class="p">;</span>
+
+  <span class="n">m</span> <span class="o">=</span> <span class="n">PyModule_Create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">spammodule</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">m</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">SpamError</span> <span class="o">=</span> <span class="n">PyErr_NewException</span><span class="p">(</span><span class="s">"spam.error"</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+  <span class="n">Py_INCREF</span><span class="p">(</span><span class="n">SpamError</span><span class="p">);</span>
+  <span class="n">PyModule_AddObject</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s">"error"</span><span class="p">,</span> <span class="n">SpamError</span><span class="p">);</span>
+
+  <span class="k">return</span> <span class="n">m</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>请注意, 异常的 Python 名称是 <code class="language-plaintext highlighter-rouge">spam.error</code>. <code class="language-plaintext highlighter-rouge">PyErr_NewException</code> 函数可以基于基 Exception 类创建新对象(除非另外又传进来一个非 <code class="language-plaintext highlighter-rouge">NULL</code> 的类), Python 的内战异常文档里有对基异常类相关的描述.</p>
+
+<p>注意 <code class="language-plaintext highlighter-rouge">SpamError</code> 保留了一个新创键对象的引用, 这是有意而为之的. 应为异常可能会被外部代码删掉, 所以又有一个对这个类的引用可以确保他不会被删掉, 保证了
+<code class="language-plaintext highlighter-rouge">SpamError</code> 不会成为悬挂指针(野指针). 如果它成了一个野指针, C 代码就会生成 <code class="language-plaintext highlighter-rouge">core dump</code> 错误或者其他未维护的副作用.</p>
+
+<p>在问找稍后会介绍 <code class="language-plaintext highlighter-rouge">PyMODINIT_FUNC</code> 这种函数返回类型.</p>
+
+<p>之后, <code class="language-plaintext highlighter-rouge">SpamError</code> 就可以和 <code class="language-plaintext highlighter-rouge">PyErr_SetString</code> 函数一起使用了, 向下面这样:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+<span class="nf">spam_system</span><span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="n">self</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="kt">char</span> <span class="o">*</span><span class="n">command</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">sts</span><span class="p">;</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"s"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">command</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">sts</span> <span class="o">=</span> <span class="n">system</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">sys</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">PyErr_SetString</span><span class="p">(</span><span class="n">SpamError</span><span class="p">,</span> <span class="s">"System command filed"</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">PyLong_FromLong</span><span class="p">(</span><span class="n">sts</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="继续例子">继续例子</h2>
+
+<p>现在, 我们回到代码. 你应该能理解下面的函数什么意思了:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"s"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">command</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>如果在参数列表里面找到错误, 那么它就会返回 <code class="language-plaintext highlighter-rouge">NULL</code>, 异常是由 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数设置的. 如果没有错误, 参数就会被拷贝到本地的 <code class="language-plaintext highlighter-rouge">command</code> 变量里面这是一个指针赋值, 并且你不应该尝试着取改变指针指向的内容. 在 C 里面, 可以声明为 <code class="language-plaintext highlighter-rouge">const char *command</code>.</p>
+
+<p>下一个语句是, 把我们从 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数获取到的参数, 传递进 Unix 系统调用 <code class="language-plaintext highlighter-rouge">system</code> 里面去.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">sts</span> <span class="o">=</span> <span class="n">system</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>我们的 <code class="language-plaintext highlighter-rouge">spam.system()</code> 应该返回 Python 对象类型, 所以使用 <code class="language-plaintext highlighter-rouge">PyLong_FromLong()</code> 函数来生成一个长整型的 Python 数字.</p>
+
+<p>如果你的某个 C 函数, 不需要返回值(返回 <code class="language-plaintext highlighter-rouge">viod</code>). 那么对应的 Python 函数必须返回 <code class="language-plaintext highlighter-rouge">None</code>. 可以使用用下面这段代码做到(有一个 <code class="language-plaintext highlighter-rouge">Py_RETRUN_NONE</code> 宏来做这个事).</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Py_INCREF</span><span class="p">(</span><span class="n">Py_None</span><span class="p">);</span>
+<span class="k">return</span> <span class="n">Py_None</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">Py_None</code> 是 Python 特殊对象 <code class="language-plaintext highlighter-rouge">None</code> 的 C 名称. 这个名称和 <code class="language-plaintext highlighter-rouge">NULL</code> 不同, <code class="language-plaintext highlighter-rouge">NULL</code> 表示发生了错误.</p>
+
+<h2 id="模块方法表和初始化函数">模块方法表和初始化函数</h2>
+
+<p>我说过会详细解释 <code class="language-plaintext highlighter-rouge">spam_system()</code> 函数是如何在 Python 代码里面调用的. 首先, 我们需要把函数的名字和地址列到方法表里面.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">PyMethodDef</span> <span class="n">SpamMethods</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="p">{</span><span class="s">"system"</span><span class="p">,</span> <span class="n">spam_syatem</span><span class="p">,</span> <span class="n">METH_VARGARS</span><span class="p">,</span> <span class="s">"Execute a shell command."</span><span class="p">},</span>
+  <span class="p">{</span><span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">}</span> <span class="cm">/* sentinel */</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>请注意第三个 <code class="language-plaintext highlighter-rouge">METH_VARGARS</code>, 这个标记告诉 Python 解释器调用转换用于 C 函数. 这个值总应该是 <code class="language-plaintext highlighter-rouge">METH_VARGARS</code> 或者 <code class="language-plaintext highlighter-rouge">METH_VARGARS | METH_KEYWORDS</code>. 传 <code class="language-plaintext highlighter-rouge">0</code> 意味着是一个 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 变体(这段不知道怎么组织语句, 我自己大概理解了, 下面保留原文).</p>
+
+<p>Note the third entry (<code class="language-plaintext highlighter-rouge">METH_VARARGS</code>). This is a flag telling the interpreter the calling convention to be used for the C function. It should normally always be <code class="language-plaintext highlighter-rouge">METH_VARARGS</code> or <code class="language-plaintext highlighter-rouge">METH_VARARGS | METH_KEYWORDS</code>; a value of 0 means that an obsolete variant of <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple()</code> is used.</p>
+
+<p>当使用 <code class="language-plaintext highlighter-rouge">METH_VARGARS</code> 的时候, 函数应该将 “Python 级别” 的参数转换为一个 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 可以接受的元组, 关于这个函数的更多信息, 我们在下面详细描述.</p>
+
+<p>如果想要向函数传递关键字参数, 那么应当设置 <code class="language-plaintext highlighter-rouge">METH_KEYWORDS</code> 位. 在这种情况下, C 函数接受一个 <code class="language-plaintext highlighter-rouge">PyObject *</code> 关键字字典对象, 应该使用 <code class="language-plaintext highlighter-rouge">PyArg_ParseTupleAndKeywords()</code> 函数来解析这种参数.</p>
+
+<p>在模块定义结构中, 必须有对方法表的引用:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="k">struct</span> <span class="n">PyModuleDef</span> <span class="n">spammodule</span> <span class="o">=</span> <span class="p">{</span>
+   <span class="n">PyModuleDef_HEAD_INIT</span><span class="p">,</span>
+   <span class="s">"spam"</span><span class="p">,</span>   <span class="cm">/* name of module */</span>
+   <span class="n">spam_doc</span><span class="p">,</span> <span class="cm">/* module documentation, may be NULL */</span>
+   <span class="o">-</span><span class="mi">1</span><span class="p">,</span>       <span class="cm">/* size of per-interpreter state of the module,
+                or -1 if the module keeps state in global variables. */</span>
+   <span class="n">SpamMethods</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>这个结构体, 又必须传送给解释器的模块创建函数, 模块初始化函数必须命名为 <code class="language-plaintext highlighter-rouge">PyInit_name</code> 这样, <code class="language-plaintext highlighter-rouge">name</code> 是模块的名字, 并且应该在模块文件里面定义为 <code class="language-plaintext highlighter-rouge">non-static</code> 的(C 基础, 定义为 <code class="language-plaintext highlighter-rouge">static</code> 的在文件外部是不可见的, 这个是模块入口, 显然不能定义成 <code class="language-plaintext highlighter-rouge">static</code> 的).</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PyMODINIT_FUNC</span>
+<span class="nf">PyInit_spam</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">PyModule_Create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">spammodule</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">PyMODEINIT_FUNC</code> 声明这个函数返回类型是 <code class="language-plaintext highlighter-rouge">PyObject *</code> 的, 它还做了一些关于平台要求的特殊链接的声明, 以及 C++ 的声明函数为 <code class="language-plaintext highlighter-rouge">ectern "C"</code>.</p>
+
+<p>当 Python 程序员第一次引入 <code class="language-plaintext highlighter-rouge">spam</code> 模块, <code class="language-plaintext highlighter-rouge">PyInit_spam</code> 就会被调用(参看下面关于内嵌 python 的论述). 这个函数调用 <code class="language-plaintext highlighter-rouge">PyModule_Create</code>, 这个函数返回一个模块对象. 它根据模块里面定义的方法表(<code class="language-plaintext highlighter-rouge">PyMethodDef</code> 结构体数组)把内置函数对象插入到新创建的模块上去, 然后返回刚刚创建的这个模块对象的指针. 它可能会因为创建错误而产生致命错误, 或者因为无法圆满的创建模块而返会 <code class="language-plaintext highlighter-rouge">NULL</code>. 初始化函数必须向它的调用者返回创建的模块对象, 调用者会把对象插入到 <code class="language-plaintext highlighter-rouge">sys.models</code> 里面去.</p>
+
+<p>当内嵌 Python 的时候, <code class="language-plaintext highlighter-rouge">PyInit_spam</code> 函数除非在 <code class="language-plaintext highlighter-rouge">PyImport_Inittab</code> 表里面有一个入口, 否则不会自动的被调用. 要把一个模块插入到初始表里面, 使用 <code class="language-plaintext highlighter-rouge">PyImport_AppendInittab</code> 函数, 跟上一个可选的模块导入语句.</p>
+
+<blockquote>
+  <p>在同一个线程里面, 从 <code class="language-plaintext highlighter-rouge">sys.module</code> 里面移除或者引入编译模块给多个解释器(或者后面跟着使用 <code class="language-plaintext highlighter-rouge">fork</code> 函数而没有使用 <code class="language-plaintext highlighter-rouge">exec</code> 函数), 可能会导致问题. 模块作者在初始某块结构的时候要小心谨慎.</p>
+</blockquote>
+
+<p>Python 源码里面的 <code class="language-plaintext highlighter-rouge">Modules/xxxmodule.c</code> 是很翔实的某块例子. 这些代码用来阅读学习或者作为模板很不错.</p>
+
+<blockquote>
+  <p>Note Unlike our <code class="language-plaintext highlighter-rouge">spam</code> example, <code class="language-plaintext highlighter-rouge">xxmodule</code> uses multi-phase initialization (new in Python 3.5), where a <code class="language-plaintext highlighter-rouge">PyModuleDef</code> structure is returned from <code class="language-plaintext highlighter-rouge">PyInit_spam</code>, and creation of the module is left to the import machinery. For details on multi-phase initialization, see PEP 489.</p>
+</blockquote>
+
+<h2 id="编译与链接">编译与链接</h2>
+
+<p>开始使用你的模块之前, 有个重要的工作要做: 编译并链接到 Python 系统. 如果你使用动态链接, 那么连接的细节会和你使用的系统的动态链接方式有关系, 更多的可以去查看本文档<a href="https://docs.python.org/3.6/extending/building.html#building">编译相关的章节</a></p>
+
+<p>如果你不使用动态链接, 或者想把你的扩展做成 Python 解释器的一部分, 那么你要修改解释器的配置, 并重新编译它. 所幸的是, 在 Unix 上做这些工作很容易, 只要把你的模块文件放到 Modules 文件夹下, 然后解压缩源代码, 并在 <code class="language-plaintext highlighter-rouge">Modules/Setup.local</code> 文件里面添加一行代码:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>spam spammodule.o
+</code></pre></div></div>
+
+<p>之后, 在 Python 解释器的顶层文件里面执行 <code class="language-plaintext highlighter-rouge">make</code> 就好了. 你也可以在 Modules 文件夹里面执行 <code class="language-plaintext highlighter-rouge">make</code>, 但是你必须先通过 <code class="language-plaintext highlighter-rouge">make Makefile</code> 构建这里的 <code class="language-plaintext highlighter-rouge">Makefile</code>. 这个步骤在你改变了 <code class="language-plaintext highlighter-rouge">Setup.local</code> 文件之后, 是必须执行的.</p>
+
+<p>如果你的模块连接了其他库, 那么这些库可以在配置文件统一行后面给加上:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>spam spammodule.o -lX11
+</code></pre></div></div>
+
+<h2 id="在-c-代码里面调用-python-函数">在 C 代码里面调用 Python 函数</h2>
+
+<p>目前为止, 我们注意力都集中在从 Python 代码里调用 C 函数. 反过来, 从 C 里面调用 Python 也是很有用的. 特别是在一些支持所谓的回调的库里面. 如果一个 C 接口使用了回调, Python 就需要向 Python 程序员提供一种回调机制. 实现上需要能够在 C 的回调代码里面, 调用 Python 程序提供的回调函数. 你也可以想象其他的应用场景.</p>
+
+<p>幸运的是, Python 解释器很容易被递归调用, 调用 Python 接口也有一套标准的接口. 这里我不想细说如如何从一个原始字符串调用 Python 解释器, 如果你感兴趣的话, 可以看一看 <code class="language-plaintext highlighter-rouge">Modules/main.c</code> 的 <code class="language-plaintext highlighter-rouge">-c</code> 命令行选项的实现.</p>
+
+<p>调用 Python 函数是很容易的. 首先, Python 程序员必须通过某种方式, 传递给你 Python 函数对象, 你应该提供一个函数(或者其他的接口)来完成这项工作. 当函数被调用的时候, 就在全局变量(或者你觉得合适的地方)里面保存一个指向 Python 函数对象的指针(要小心地对它使用 <code class="language-plaintext highlighter-rouge">Py_INCREF</code>). 作为例子, 下面的代码可作为模块定义的一部分.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">my_callback</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+<span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+<span class="nf">set_my_callback</span><span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="n">dummy</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="n">PyObject</span> <span class="o">*</span><span class="n">tmp</span><span class="p">;</span>
+  <span class="n">PyObject</span> <span class="o">*</span><span class="n">result</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"O:set_callback"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tmp</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyCallable_Check</span><span class="p">(</span><span class="n">tmp</span><span class="p">))</span> <span class="p">{</span>
+    <span class="n">PyErr_SetString</span><span class="p">(</span><span class="n">PyExc_TypeError</span><span class="p">,</span> <span class="s">"parameter mast be callable."</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">Py_XINCREF</span><span class="p">(</span><span class="n">tmp</span><span class="p">);</span>         <span class="cm">/* Add a reference to new callback */</span>
+  <span class="n">Py_XDECREF</span><span class="p">(</span><span class="n">my_callback</span><span class="p">);</span> <span class="cm">/* Dispose of previous callback */</span>
+  <span class="n">my_callback</span> <span class="o">=</span> <span class="n">tmp</span><span class="p">;</span>       <span class="cm">/* Remember new callback */</span>
+
+  <span class="cm">/* Boilerplate to return "None" */</span>
+  <span class="n">Py_INCREF</span><span class="p">(</span><span class="n">Py_None</span><span class="p">);</span>
+  <span class="n">result</span> <span class="o">=</span> <span class="n">Py_None</span><span class="p">;</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这个函数在向解释器注册的时候, 必须使用 <code class="language-plaintext highlighter-rouge">METH_VARGARS</code> 方式. 这个方式在”模块方法表和初始化函数”一节已经介绍过了. <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple()</code> 函数和它的参数相关文档在 <a href="http://#">Extracting Parameters in Extension Functions</a></p>
+
+<p><code class="language-plaintext highlighter-rouge">Py_XINCREF()</code> 和 <code class="language-plaintext highlighter-rouge">Py_XDECREF()</code> 宏用来增加/减少对象的引用计数, 他们用在 <code class="language-plaintext highlighter-rouge">NULL</code> 指针上也是安全的(但是请注意这里的上下文中, <code class="language-plaintext highlighter-rouge">tmp</code> 指针不可能是空). 更多关于这两个宏的信息请参考相关文档.</p>
+
+<p>最后, 当要调用 Python 函数的时候, 使用 C 函数 <code class="language-plaintext highlighter-rouge">PyObject_CallObject()</code>. 这个函数接受两个参数, 都指向任意 Python 对象: Python 函数, 还有 Python 参数列表. 参数列表必须是一个元组对象, 长度就是参数的个数. 如果希望不带参数调用 Python 函数, 那么, 参数列表对象就传空值, 或者传一个空的元组对象. 要以一个参数调用它, 传一个单元素元组. 当传给 <code class="language-plaintext highlighter-rouge">Py_BuildValue()</code> 函数的格式化字符串里面有以括号扩起来的零个或多个格式化元素时, 它会返回一个元组. 比如像下面这样:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="n">arg</span><span class="p">;</span>
+<span class="n">PyObject</span> <span class="o">*</span><span class="n">arglist</span><span class="p">;</span>
+<span class="n">PyObject</span> <span class="o">*</span><span class="n">result</span><span class="p">;</span>
+<span class="p">...</span>
+<span class="n">arg</span> <span class="o">=</span> <span class="mi">123</span><span class="p">;</span>
+<span class="p">...</span>
+<span class="cm">/* Time to call the callback */</span>
+<span class="n">arglist</span> <span class="o">=</span> <span class="n">Py_BuildValue</span><span class="p">(</span><span class="s">"(i)"</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">PyObject_CallObject</span><span class="p">(</span><span class="n">my_callback</span><span class="p">,</span> <span class="n">arglist</span><span class="p">);</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">arglist</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">PyObject_CallObject()</code> 返回一个 指向 Python 函数返回值的 Python 对象指针, <code class="language-plaintext highlighter-rouge">PyObject_CallObject()</code> 函数对它的参数是所谓的 reference-count-neutral 的. 在例子里面, 会创建一个新的元组作为参数列表传入, 所以后面马上调用 <code class="language-plaintext highlighter-rouge">Py_DECREF()</code> 处理了一下.</p>
+
+<p><code class="language-plaintext highlighter-rouge">PyObject_CallObject()</code> 的返回值是”新的”, 要么它是一个全新的对象, 要么就是一个已经存在了的引用数加一的对象. 因此, 除非你想把它作为一个全局对象, 否则即便你对返回值不感兴趣, 你也应该对它设法调用 <code class="language-plaintext highlighter-rouge">Py_DECREF()</code></p>
+
+<p>做上面这些处理之前, 检查返回值是不是 <code class="language-plaintext highlighter-rouge">NULL</code> 是很重要的. 如果是的话, 那 Python 函数就是被抛出的异常打断的. 如果调用 <code class="language-plaintext highlighter-rouge">PyObject_CallObject</code> 的 C 代码是从 Python 里面调用的, 那么它应该返回一个错误来通知它的 Python 调用者, 然后解释器就会打印调用栈, 或者调用处理这个异常的 Python 代码. 如果不想网这么做, 或者无法实现, 产生的异常应该调用 <code class="language-plaintext highlighter-rouge">PyErr_Clear()</code> 函数清除. 比如:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="n">result</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span> <span class="cm">/* Pass error back */</span>
+<span class="p">...</span><span class="n">use</span> <span class="n">result</span><span class="p">...</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>根据希望使用的 Python 回调函数接口, 你也可以向 <code class="language-plaintext highlighter-rouge">PyObject_CallObject</code> 提供一个参数列表, 一些情况下, 参数列表也可以由 Python 程序员通过规定了回调函数的接口提供. 之后参数列表可以被保存或者作为 Python 对象使用. 在其他情况下, 你可能需要自己构建新的元组作为参数列表. 最简单的方式就是调用 <code class="language-plaintext highlighter-rouge">Py_BuildValue</code> 函数. 比如说, 我们希望传递一个整型事件码, 可以使用下面的代码:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PyObject</span> <span class="o">*</span><span class="n">arglist</span><span class="p">;</span>
+<span class="p">...</span>
+<span class="n">arglist</span> <span class="o">=</span> <span class="n">Py_BuildValue</span><span class="p">(</span><span class="s">"(l)"</span><span class="p">,</span> <span class="n">eventcode</span><span class="p">);</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">PyObject_CallObject</span><span class="p">(</span><span class="n">my_callback</span><span class="p">,</span> <span class="n">arglist</span><span class="p">);</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">arglist</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">result</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span> <span class="cm">/* Pass error back */</span>
+<span class="cm">/* Here maybe use the result */</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>请注意, <code class="language-plaintext highlighter-rouge">Py_DECREF(arglist)</code> 调用发生在调用完成之后, 错误检查之前. 严格来说, 这段代码并不完整, <code class="language-plaintext highlighter-rouge">Py_BuildValue</code> 可能会因为内存不够用而返会失败, 这应该要检查.</p>
+
+<p>你也可以使用 <code class="language-plaintext highlighter-rouge">PyObject_Call</code> 函数通过关键字参数来调用函数, 这个函数支持参数和关键字参数, 还以上面的例子, 我们使用 <code class="language-plaintext highlighter-rouge">Py_BuildValue</code> 来创建一个字典.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PyObject</span> <span class="o">*</span><span class="n">dict</span><span class="p">;</span>
+<span class="p">...</span>
+<span class="n">dict</span> <span class="o">=</span> <span class="n">Py_BuildValue</span><span class="p">(</span><span class="s">"{s:i}"</span><span class="p">,</span> <span class="s">"name"</span><span class="p">,</span> <span class="n">val</span><span class="p">);</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">PyObject_Call</span><span class="p">(</span><span class="n">my_callback</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">dict</span><span class="p">);</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">dict</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">result</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span> <span class="cm">/* Pass error back */</span>
+<span class="p">}</span>
+<span class="cm">/* Here maybe use the result */</span>
+<span class="n">Py_DECREF</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="在扩展函数里面取得参数">在扩展函数里面取得参数</h2>
+
+<p><code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 函数具有一下定义:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">PyArg_ParseTuple</span><span class="p">(</span><span class="n">Pyobject</span> <span class="o">*</span><span class="n">arg</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">format</span><span class="p">,</span> <span class="p">...);</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">arg</code> 参数必须是一个包含了从 Python 传送给 C 函数参数元素的元组对象. <code class="language-plaintext highlighter-rouge">format</code> 参数一定要是一个字符串, 它的语法在文档的<a href="https://docs.python.org/3/c-api/arg.html#arg-parsing">解析参数和构建值</a>章节有解释(whose syntax is explained in Parsing arguments and building values in the Python/C API Reference Manual). 余下的参数, 应该是格式化字符串里面对应的类型对象的地址.</p>
+
+<blockquote>
+  <p>请注意 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple()</code> 函数检测 Python 参数具有要求的的类型, 但是它不能检测传递给它的 C 变量地址的有效性, 所以, 如果你在这里犯错误, 那么你的成活可能会崩溃, 或者最少会在内存里面写一些无意义的字节. 所以请小心.</p>
+</blockquote>
+
+<blockquote>
+  <p>请注意所有提供给调用者的 Python 对象, 都是所谓的”借用引用(borrowed references)”, 所以不要自行减少他们的引用数量.</p>
+</blockquote>
+
+<p>下面是一些示例代码:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define PY_SIZE_T_CLEAN </span><span class="cm">/* Make "s#" use Py_ssize_t rather than int. */</span><span class="cp">
+#include</span> <span class="cpf">&lt;Python.h&gt;</span><span class="cp">
+</span>
+<span class="kt">int</span> <span class="n">ok</span><span class="p">;</span>
+<span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">;</span>
+<span class="kt">long</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">;</span>
+<span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">;</span>
+<span class="n">Py_ssize_t</span> <span class="n">size</span><span class="p">;</span>
+
+<span class="cm">/* no arguments */</span>
+<span class="cm">/* Python call: f() */</span>
+<span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">""</span><span class="p">);</span>
+
+<span class="cm">/* a string */</span>
+<span class="cm">/* python call: f('hello world') */</span>
+<span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"s"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+
+<span class="cm">/* two longs and a string */</span>
+<span class="cm">/** python call: f(1, 2, 'three') */</span>
+<span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"lls"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">k</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">l</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+
+<span class="cm">/* A pair of ints and a string, whose size is also returned */</span>
+<span class="cm">/* Possible Python call: f((1, 2), 'three') */</span>
+<span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"(ii)s#"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">i</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">j</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">size</span><span class="p">);</span>
+
+<span class="p">{</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">file</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">mode</span> <span class="o">=</span> <span class="s">"r"</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">bufsize</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="cm">/* A string, and optionally another string and an integer */</span>
+  <span class="cm">/* Possible Python calls:
+     f('spam')
+     f('spam', 'w')
+     f('spam', 'wb', 100000) */</span>
+  <span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"s|si"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">file</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">bufsize</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="p">{</span>
+  <span class="kt">int</span> <span class="n">left</span><span class="p">,</span> <span class="n">top</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="n">bottom</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">v</span><span class="p">;</span>
+
+  <span class="cm">/* A rectangle and a point */</span>
+  <span class="cm">/* Possible Python call:
+     f(((0, 0), (400, 300)), (10, 10)) */</span>
+  <span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"((ii)(ii))(ii)"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">left</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">top</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">right</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">bottom</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">h</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">v</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="p">{</span>
+  <span class="n">Py_complex</span> <span class="n">c</span><span class="p">;</span>
+
+  <span class="cm">/* a complex, also providing a function name for errors */</span>
+  <span class="cm">/* Possible Python call: myfunction(1+2j) */</span>
+  <span class="n">ok</span> <span class="o">=</span> <span class="n">PyArg_ParseTuple</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s">"D:myfunction"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">c</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="在扩展里面使用关键字参数">在扩展里面使用关键字参数</h2>
+
+<p><code class="language-plaintext highlighter-rouge">PyArg_ParseTupleAndKeywords()</code> 函数原型如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">PyArg_ParseTupleAndKeywords</span><span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="n">arg</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">kwdict</span><span class="p">,</span>
+                                <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">format</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">kwlist</span><span class="p">[],</span> <span class="p">...);</span>
+</code></pre></div></div>
+
+<p>传给它的 <code class="language-plaintext highlighter-rouge">arg</code> 和 <code class="language-plaintext highlighter-rouge">format</code> 参数意义和传给 <code class="language-plaintext highlighter-rouge">PyArg_ParseTuple</code> 的一样. <code class="language-plaintext highlighter-rouge">kwdict</code> 参数是 Python 运行时传递给 C 函数作为关键字字典的第三个参数. <code class="language-plaintext highlighter-rouge">kwlist</code> 参数应该是一个 <code class="language-plaintext highlighter-rouge">NULL</code> 结尾的字符串列表, 名字和格式化字符串里面从左到右相匹配. 执行成功的时候, <code class="language-plaintext highlighter-rouge">PyArg_ParseTupleAndKwywords</code> 函数会犯会真, 否则它返回假, 并且会触发一个相应的异常.</p>
+
+<p>当使用关键字参数时, 里面的嵌套元组不能解析. 传入不在 <code class="language-plaintext highlighter-rouge">kwlist</code> 里面的关键字参数会导致 <code class="language-plaintext highlighter-rouge">TypeError</code> 异常, 下面是一个 Geoff Philbrick 写的例子:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;Python.h&gt;</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+<span class="nf">keywdarg_parrot</span><span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="n">self</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">keywds</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">voltage</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">state</span> <span class="o">=</span> <span class="s">"a stiff"</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">action</span> <span class="o">=</span> <span class="s">"voom"</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">type</span> <span class="o">=</span> <span class="s">"Norwegian Blue"</span><span class="p">;</span>
+
+    <span class="k">static</span> <span class="kt">char</span> <span class="o">*</span><span class="n">kwlist</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span><span class="s">"voltage"</span><span class="p">,</span> <span class="s">"state"</span><span class="p">,</span> <span class="s">"action"</span><span class="p">,</span> <span class="s">"type"</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">};</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">PyArg_ParseTupleAndKeywords</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">keywds</span><span class="p">,</span> <span class="s">"i|sss"</span><span class="p">,</span> <span class="n">kwlist</span><span class="p">,</span>
+                                     <span class="o">&amp;</span><span class="n">voltage</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">state</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">action</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">type</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"-- This parrot wouldn't %s if you put %i Volts through it.</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+           <span class="n">action</span><span class="p">,</span> <span class="n">voltage</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"-- Lovely plumage, the %s -- It's %s!</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="n">state</span><span class="p">);</span>
+
+    <span class="n">Py_RETURN_NONE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="n">PyMethodDef</span> <span class="n">keywdarg_methods</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="cm">/* The cast of the function is necessary since PyCFunction values
+     * only take two PyObject* parameters, and keywdarg_parrot() takes
+     * three.
+     */</span>
+    <span class="p">{</span><span class="s">"parrot"</span><span class="p">,</span> <span class="p">(</span><span class="n">PyCFunction</span><span class="p">)</span><span class="n">keywdarg_parrot</span><span class="p">,</span> <span class="n">METH_VARARGS</span> <span class="o">|</span> <span class="n">METH_KEYWORDS</span><span class="p">,</span>
+     <span class="s">"Print a lovely skit to standard output."</span><span class="p">},</span>
+    <span class="p">{</span><span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">}</span>   <span class="cm">/* sentinel */</span>
+<span class="p">};</span>
+
+<span class="k">static</span> <span class="k">struct</span> <span class="n">PyModuleDef</span> <span class="n">keywdargmodule</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">PyModuleDef_HEAD_INIT</span><span class="p">,</span>
+    <span class="s">"keywdarg"</span><span class="p">,</span>
+    <span class="nb">NULL</span><span class="p">,</span>
+    <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">keywdarg_methods</span>
+<span class="p">};</span>
+
+<span class="n">PyMODINIT_FUNC</span>
+<span class="nf">PyInit_keywdarg</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">PyModule_Create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">keywdargmodule</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+</div><section class="article__sharing d-print-none"></section><div class="d-print-none"><footer class="article__footer"><meta itemprop="dateModified" content="2017-05-18T20:14:04+08:00"><!-- start custom article footer snippet -->
+
+<!-- end custom article footer snippet -->
+<div class="article__subscribe"><div class="subscribe"><i class="fas fa-rss"></i> <a type="application/rss+xml" href="/feed.xml">订阅</a></div>
+</div><div class="article__license"></div></footer>
+<div class="article__section-navigator clearfix"><div class="previous"><span>上篇</span><a href="/2017/03/10/json-c.html">json c 笔记</a></div><div class="next"><span>下篇</span><a href="/2018/01/24/bitcoin-note.html">比特币科普</a></div></div></div>
+
+</div>
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    $(function() {
+      var $this ,$scroll;
+      var $articleContent = $('.js-article-content');
+      var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+      var scroll = hasSidebar ? '.js-page-main' : 'html, body';
+      $scroll = $(scroll);
+
+      $articleContent.find('.highlight').each(function() {
+        $this = $(this);
+        $this.attr('data-lang', $this.find('code').attr('data-lang'));
+      });
+      $articleContent.find('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]').each(function() {
+        $this = $(this);
+        $this.append($('<a class="anchor d-print-none" aria-hidden="true"></a>').html('<i class="fas fa-anchor"></i>'));
+      });
+      $articleContent.on('click', '.anchor', function() {
+        $scroll.scrollToAnchor('#' + $(this).parent().attr('id'), 400);
+      });
+    });
+  });
+})();
+</script>
+</div><section class="page__comments d-print-none"></section></article><!-- start custom main bottom snippet -->
+
+<!-- end custom main bottom snippet -->
+</div>
+            </div></div></div><div class="page__footer d-print-none">
+<footer class="footer py-4 js-page-footer">
+    <div class="main"><div itemscope itemtype="http://schema.org/Person">
+        <meta itemprop="name" content="Zhigang Song"><meta itemprop="url" content="/"><meta itemprop="description" content="一个安静的程序员"><div class="footer__author-links"><div class="author-links">
+  <ul class="menu menu--nowrap menu--inline"><li title="在 Github 上关注我。">
+        <a class="button button--circle github-button" itemprop="sameAs" href="https://github.com/sidgwick" target="_blank">
+          <div class="icon"><svg fill="#000000" width="24px" height="24px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <path class="svgpath" data-index="path_0" fill="#272636" d="M0 525.2c0 223.6 143.3 413.7 343 483.5 26.9 6.8 22.8-12.4 22.8-25.4l0-88.7c-155.3 18.2-161.5-84.6-172-101.7-21.1-36-70.8-45.2-56-62.3 35.4-18.2 71.4 4.6 113.1 66.3 30.2 44.7 89.1 37.2 119 29.7 6.5-26.9 20.5-50.9 39.7-69.6C248.8 728.2 181.7 630 181.7 513.2c0-56.6 18.7-108.7 55.3-150.7-23.3-69.3 2.2-128.5 5.6-137.3 66.5-6 135.5 47.6 140.9 51.8 37.8-10.2 80.9-15.6 129.1-15.6 48.5 0 91.8 5.6 129.8 15.9 12.9-9.8 77-55.8 138.8-50.2 3.3 8.8 28.2 66.7 6.3 135 37.1 42.1 56 94.6 56 151.4 0 117-67.5 215.3-228.8 243.7 26.9 26.6 43.6 63.4 43.6 104.2l0 128.8c0.9 10.3 0 20.5 17.2 20.5C878.1 942.4 1024 750.9 1024 525.3c0-282.9-229.3-512-512-512C229.1 13.2 0 242.3 0 525.2L0 525.2z" />
+</svg>
+</div>
+        </a>
+      </li></ul>
+</div>
+</div>
+      </div><div class="site-info mt-2">
+        <div>© Zhigang Song 2015-2024,
+          Powered by <a title="Jekyll is a simple, blog-aware, static site generator." href="http://jekyllrb.com/">Jekyll</a> & <a
+          title="TeXt is a super customizable Jekyll theme." href="https://github.com/kitian616/jekyll-TeXt-theme">TeXt Theme</a>.
+        </div>
+        <div>
+            <a href="https://beian.miit.gov.cn/">豫ICP备19037616号</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+  </div></div>
+    </div><script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $body = $('body'), $window = $(window);
+    var $pageRoot = $('.js-page-root'), $pageMain = $('.js-page-main');
+    var activeCount = 0;
+    function modal(options) {
+      var $root = this, visible, onChange, hideWhenWindowScroll = false;
+      var scrollTop;
+      function setOptions(options) {
+        var _options = options || {};
+        visible = _options.initialVisible === undefined ? false : show;
+        onChange = _options.onChange;
+        hideWhenWindowScroll = _options.hideWhenWindowScroll;
+      }
+      function init() {
+        setState(visible);
+      }
+      function setState(isShow) {
+        if (isShow === visible) {
+          return;
+        }
+        visible = isShow;
+        if (visible) {
+          activeCount++;
+          scrollTop = $(window).scrollTop() || $pageMain.scrollTop();
+          $root.addClass('modal--show');
+          $pageMain.scrollTop(scrollTop);
+          activeCount === 1 && ($pageRoot.addClass('show-modal'), $body.addClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.on('scroll', hide);
+          $window.on('keyup', handleKeyup);
+        } else {
+          activeCount > 0 && activeCount--;
+          $root.removeClass('modal--show');
+          $window.scrollTop(scrollTop);
+          activeCount === 0 && ($pageRoot.removeClass('show-modal'), $body.removeClass('of-hidden'));
+          hideWhenWindowScroll && window.hasEvent('touchstart') && $window.off('scroll', hide);
+          $window.off('keyup', handleKeyup);
+        }
+        onChange && onChange(visible);
+      }
+      function show() {
+        setState(true);
+      }
+      function hide() {
+        setState(false);
+      }
+      function handleKeyup(e) {
+        // Char Code: 27  ESC
+        if (e.which ===  27) {
+          hide();
+        }
+      }
+      setOptions(options);
+      init();
+      return {
+        show: show,
+        hide: hide,
+        $el: $root
+      };
+    }
+    $.fn.modal = modal;
+  });
+})();
+</script><div class="modal modal--overflow page__search-modal d-print-none js-page-search-modal"><script>
+(function () {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    // search panel
+    var search = (window.search || (window.search = {}));
+    var useDefaultSearchBox = window.useDefaultSearchBox === undefined ?
+      true : window.useDefaultSearchBox ;
+
+    var $searchModal = $('.js-page-search-modal');
+    var $searchToggle = $('.js-search-toggle');
+    var searchModal = $searchModal.modal({ onChange: handleModalChange, hideWhenWindowScroll: true });
+    var modalVisible = false;
+    search.searchModal = searchModal;
+
+    var $searchBox = null;
+    var $searchInput = null;
+    var $searchClear = null;
+
+    function getModalVisible() {
+      return modalVisible;
+    }
+    search.getModalVisible = getModalVisible;
+
+    function handleModalChange(visible) {
+      modalVisible = visible;
+      if (visible) {
+        search.onShow && search.onShow();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].focus();
+      } else {
+        search.onShow && search.onHide();
+        useDefaultSearchBox && $searchInput[0] && $searchInput[0].blur();
+        setTimeout(function() {
+          useDefaultSearchBox && ($searchInput.val(''), $searchBox.removeClass('not-empty'));
+          search.clear && search.clear();
+          window.pageAsideAffix && window.pageAsideAffix.refresh();
+        }, 400);
+      }
+    }
+
+    $searchToggle.on('click', function() {
+      modalVisible ? searchModal.hide() : searchModal.show();
+    });
+    // Char Code: 83  S, 191 /
+    $(window).on('keyup', function(e) {
+      if (!modalVisible && !window.isFormElement(e.target || e.srcElement) && (e.which === 83 || e.which === 191)) {
+        modalVisible || searchModal.show();
+      }
+    });
+
+    if (useDefaultSearchBox) {
+      $searchBox = $('.js-search-box');
+      $searchInput = $searchBox.children('input');
+      $searchClear = $searchBox.children('.js-icon-clear');
+      search.getSearchInput = function() {
+        return $searchInput.get(0);
+      };
+      search.getVal = function() {
+        return $searchInput.val();
+      };
+      search.setVal = function(val) {
+        $searchInput.val(val);
+      };
+
+      $searchInput.on('focus', function() {
+        $(this).addClass('focus');
+      });
+      $searchInput.on('blur', function() {
+        $(this).removeClass('focus');
+      });
+      $searchInput.on('input', window.throttle(function() {
+        var val = $(this).val();
+        if (val === '' || typeof val !== 'string') {
+          search.clear && search.clear();
+        } else {
+          $searchBox.addClass('not-empty');
+          search.onInputNotEmpty && search.onInputNotEmpty(val);
+        }
+      }, 400));
+      $searchClear.on('click', function() {
+        $searchInput.val(''); $searchBox.removeClass('not-empty');
+        search.clear && search.clear();
+      });
+    }
+  });
+})();
+</script><div class="search search--dark">
+  <div class="main">
+    <div class="search__header">搜索</div>
+    <div class="search-bar">
+      <div class="search-box js-search-box">
+        <div class="search-box__icon-search"><i class="fas fa-search"></i></div>
+        <input type="text" />
+        <div class="search-box__icon-clear js-icon-clear">
+          <a><i class="fas fa-times"></i></a>
+        </div>
+      </div>
+      <button class="button button--theme-dark button--pill search__cancel js-search-toggle">
+        取消</button>
+    </div>
+    <div class="search-result js-search-result"></div>
+  </div>
+</div>
+<script>var SOURCES = window.TEXT_VARIABLES.sources;
+var PAHTS = window.TEXT_VARIABLES.paths;
+window.Lazyload.js([SOURCES.jquery, PAHTS.search_js], function() {
+  var search = (window.search || (window.search = {}));
+  var searchData = window.TEXT_SEARCH_DATA || {};
+
+  function memorize(f) {
+    var cache = {};
+    return function () {
+      var key = Array.prototype.join.call(arguments, ',');
+      if (key in cache) return cache[key];
+      else return cache[key] = f.apply(this, arguments);
+    };
+  }
+
+  /// search
+  function searchByQuery(query) {
+    var i, j, key, keys, cur, _title, result = {};
+    keys = Object.keys(searchData);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      for (j = 0; j < searchData[key].length; j++) {
+        cur = searchData[key][j], _title = cur.title;
+        if ((result[key] === undefined || result[key] && result[key].length < 4 )
+          && _title.toLowerCase().indexOf(query.toLowerCase()) >= 0) {
+          if (result[key] === undefined) {
+            result[key] = [];
+          }
+          result[key].push(cur);
+        }
+      }
+    }
+    return result;
+  }
+
+  var renderHeader = memorize(function(header) {
+    return $('<p class="search-result__header">' + header + '</p>');
+  });
+
+  var renderItem = function(index, title, url) {
+    return $('<li class="search-result__item" data-index="' + index + '"><a class="button" href="' + url + '">' + title + '</a></li>');
+  };
+
+  function render(data) {
+    if (!data) { return null; }
+    var $root = $('<ul></ul>'), i, j, key, keys, cur, itemIndex = 0;
+    keys = Object.keys(data);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      $root.append(renderHeader(key));
+      for (j = 0; j < data[key].length; j++) {
+        cur = data[key][j];
+        $root.append(renderItem(itemIndex++, cur.title, cur.url));
+      }
+    }
+    return $root;
+  }
+
+  // search box
+  var $result = $('.js-search-result'), $resultItems;
+  var lastActiveIndex, activeIndex;
+
+  function clear() {
+    $result.html(null);
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+  }
+  function onInputNotEmpty(val) {
+    $result.html(render(searchByQuery(val)));
+    $resultItems = $('.search-result__item'); activeIndex = 0;
+    $resultItems.eq(0).addClass('active');
+  }
+
+  search.clear = clear;
+  search.onInputNotEmpty = onInputNotEmpty;
+
+  function updateResultItems() {
+    lastActiveIndex >= 0 && $resultItems.eq(lastActiveIndex).removeClass('active');
+    activeIndex >= 0 && $resultItems.eq(activeIndex).addClass('active');
+  }
+
+  function moveActiveIndex(direction) {
+    var itemsCount = $resultItems ? $resultItems.length : 0;
+    if (itemsCount > 1) {
+      lastActiveIndex = activeIndex;
+      if (direction === 'up') {
+        activeIndex = (activeIndex - 1 + itemsCount) % itemsCount;
+      } else if (direction === 'down') {
+        activeIndex = (activeIndex + 1 + itemsCount) % itemsCount;
+      }
+      updateResultItems();
+    }
+  }
+
+  // Char Code: 13  Enter, 37  ⬅, 38  ⬆, 39  ➡, 40  ⬇
+  $(window).on('keyup', function(e) {
+    var modalVisible = search.getModalVisible && search.getModalVisible();
+    if (modalVisible) {
+      if (e.which === 38) {
+        modalVisible && moveActiveIndex('up');
+      } else if (e.which === 40) {
+        modalVisible && moveActiveIndex('down');
+      } else if (e.which === 13) {
+        modalVisible && $resultItems && activeIndex >= 0 && $resultItems.eq(activeIndex).children('a')[0].click();
+      }
+    }
+  });
+
+  $result.on('mouseover', '.search-result__item > a', function() {
+    var itemIndex = $(this).parent().data('index');
+    itemIndex >= 0 && (lastActiveIndex = activeIndex, activeIndex = itemIndex, updateResultItems());
+  });
+});
+</script>
+</div></div>
+
+
+<script>(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function scrollToAnchor(anchor, duration, callback) {
+      var $root = this;
+      $root.animate({ scrollTop: $(anchor).position().top }, duration, function() {
+        window.history.replaceState(null, '', window.location.href.split('#')[0] + anchor);
+        callback && callback();
+      });
+    }
+    $.fn.scrollToAnchor = scrollToAnchor;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function affix(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroll,
+        offsetBottom = 0, scrollTarget = window, scroll = window.document, disabled = false, isOverallScroller = true,
+        rootTop, rootLeft, rootHeight, scrollBottom, rootBottomTop,
+        hasInit = false, curState;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.offsetBottom && (offsetBottom = _options.offsetBottom);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroll && (scroll = _options.scroll);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $scrollTarget = $(scrollTarget);
+        isOverallScroller = window.isOverallScroller($scrollTarget[0]);
+        $scroll = $(scroll);
+      }
+      function preCalc() {
+        top();
+        rootHeight = $root.outerHeight();
+        rootTop = $root.offset().top + (isOverallScroller ? 0 :  $scrollTarget.scrollTop());
+        rootLeft = $root.offset().left;
+      }
+      function calc(needPreCalc) {
+        needPreCalc && preCalc();
+        scrollBottom = $scroll.outerHeight() - offsetBottom - rootHeight;
+        rootBottomTop = scrollBottom - rootTop;
+      }
+      function top() {
+        if (curState !== 'top') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: 0
+          });
+          curState = 'top';
+        }
+      }
+      function fixed() {
+        if (curState !== 'fixed') {
+          $root.addClass('fixed').css({
+            left: rootLeft + 'px',
+            top: 0
+          });
+          curState = 'fixed';
+        }
+      }
+      function bottom() {
+        if (curState !== 'bottom') {
+          $root.removeClass('fixed').css({
+            left: 0,
+            top: rootBottomTop + 'px'
+          });
+          curState = 'bottom';
+        }
+      }
+      function setState() {
+        var scrollTop = $scrollTarget.scrollTop();
+        if (scrollTop >= rootTop && scrollTop <= scrollBottom) {
+          fixed();
+        } else if (scrollTop < rootTop) {
+          top();
+        } else {
+          bottom();
+        }
+      }
+      function init() {
+        if(!hasInit) {
+          var interval, timeout;
+          calc(true); setState();
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState();
+          });
+          $window.on('resize', function() {
+            disabled || (calc(true), setState());
+          });
+          hasInit = true;
+        }
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions,
+        refresh: function() {
+          calc(true, { animation: false }); setState();
+        }
+      };
+    }
+    $.fn.affix = affix;
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    function toc(options) {
+      var $root = this, $window = $(window), $scrollTarget, $scroller, $tocUl = $('<ul class="toc toc--ellipsis"></ul>'), $tocLi, $headings, $activeLast, $activeCur,
+        selectors = 'h1,h2,h3', container = 'body', scrollTarget = window, scroller = 'html, body', disabled = false,
+        headingsPos, scrolling = false, hasRendered = false, hasInit = false;
+
+      function setOptions(options) {
+        var _options = options || {};
+        _options.selectors && (selectors = _options.selectors);
+        _options.container && (container = _options.container);
+        _options.scrollTarget && (scrollTarget = _options.scrollTarget);
+        _options.scroller && (scroller = _options.scroller);
+        _options.disabled !== undefined && (disabled = _options.disabled);
+        $headings = $(container).find(selectors).filter('[id]');
+        $scrollTarget = $(scrollTarget);
+        $scroller = $(scroller);
+      }
+      function calc() {
+        headingsPos = [];
+        $headings.each(function() {
+          headingsPos.push(Math.floor($(this).position().top));
+        });
+      }
+      function setState(element, disabled) {
+        var scrollTop = $scrollTarget.scrollTop(), i;
+        if (disabled || !headingsPos || headingsPos.length < 1) { return; }
+        if (element) {
+          $activeCur = element;
+        } else {
+          for (i = 0; i < headingsPos.length; i++) {
+            if (scrollTop >= headingsPos[i]) {
+              $activeCur = $tocLi.eq(i);
+            } else {
+              $activeCur || ($activeCur = $tocLi.eq(i));
+              break;
+            }
+          }
+        }
+        $activeLast && $activeLast.removeClass('active');
+        ($activeLast = $activeCur).addClass('active');
+      }
+      function render() {
+        if(!hasRendered) {
+          $root.append($tocUl);
+          $headings.each(function() {
+            var $this = $(this);
+            $tocUl.append($('<li></li>').addClass('toc-' + $this.prop('tagName').toLowerCase())
+              .append($('<a></a>').text($this.text()).attr('href', '#' + $this.prop('id'))));
+          });
+          $tocLi = $tocUl.children('li');
+          $tocUl.on('click', 'a', function(e) {
+            e.preventDefault();
+            var $this = $(this);
+            scrolling = true;
+            setState($this.parent());
+            $scroller.scrollToAnchor($this.attr('href'), 400, function() {
+              scrolling = false;
+            });
+          });
+        }
+        hasRendered = true;
+      }
+      function init() {
+        var interval, timeout;
+        if(!hasInit) {
+          render(); calc(); setState(null, scrolling);
+          // run calc every 100 millisecond
+          interval = setInterval(function() {
+            calc();
+          }, 100);
+          timeout = setTimeout(function() {
+            clearInterval(interval);
+          }, 45000);
+          window.pageLoad.then(function() {
+            setTimeout(function() {
+              clearInterval(interval);
+              clearTimeout(timeout);
+            }, 3000);
+          });
+          $scrollTarget.on('scroll', function() {
+            disabled || setState(null, scrolling);
+          });
+          $window.on('resize', window.throttle(function() {
+            if (!disabled) {
+              render(); calc(); setState(null, scrolling);
+            }
+          }, 100));
+        }
+        hasInit = true;
+      }
+
+      setOptions(options);
+      if (!disabled) {
+        init();
+      }
+      $window.on('resize', window.throttle(function() {
+        init();
+      }, 200));
+      return {
+        setOptions: setOptions
+      };
+    }
+    $.fn.toc = toc;
+  });
+})();
+/*(function () {
+
+})();*/
+</script><script>
+  /* toc must before affix, since affix need to konw toc' height. */(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  var TOC_SELECTOR = window.TEXT_VARIABLES.site.toc.selectors;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window);
+    var $articleContent = $('.js-article-content');
+    var $tocRoot = $('.js-toc-root'), $col2 = $('.js-col-aside');
+    var toc;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+    var hasToc = $articleContent.find(TOC_SELECTOR).length > 0;
+
+    function disabled() {
+      return $col2.css('display') === 'none' || !hasToc;
+    }
+
+    tocDisabled = disabled();
+
+    toc = $tocRoot.toc({
+      selectors: TOC_SELECTOR,
+      container: $articleContent,
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      tocDisabled = disabled();
+      toc && toc.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+  });
+})();
+(function() {
+  var SOURCES = window.TEXT_VARIABLES.sources;
+  window.Lazyload.js(SOURCES.jquery, function() {
+    var $window = $(window), $pageFooter = $('.js-page-footer');
+    var $pageAside = $('.js-page-aside');
+    var affix;
+    var tocDisabled = false;
+    var hasSidebar = $('.js-page-root').hasClass('layout--page--sidebar');
+
+    affix = $pageAside.affix({
+      offsetBottom: $pageFooter.outerHeight(),
+      scrollTarget: hasSidebar ? '.js-page-main' : null,
+      scroller: hasSidebar ? '.js-page-main' : null,
+      scroll: hasSidebar ? $('.js-page-main').children() : null,
+      disabled: tocDisabled
+    });
+
+    $window.on('resize', window.throttle(function() {
+      affix && affix.setOptions({
+        disabled: tocDisabled
+      });
+    }, 100));
+
+    window.pageAsideAffix = affix;
+  });
+})();
+</script><script type="text/x-mathjax-config">
+	var _config = { tex2jax: {
+		inlineMath: [['$','$'], ['\\(','\\)']]
+	}};MathJax.Hub.Config(_config);
+</script>
+<script type="text/javascript" src="https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
+<script>
+  window.Lazyload.js('https://cdn.bootcss.com/mermaid/8.0.0-rc.8/mermaid.min.js', function() {
+    mermaid.initialize({
+      startOnLoad: true
+    });
+    mermaid.init(undefined, '.language-mermaid');
+  });
+</script>
+
+    </div>
+    <script>(function () {
+  var $root = document.getElementsByClassName('root')[0];
+  if (window.hasEvent('touchstart')) {
+    $root.dataset.isTouch = true;
+    document.addEventListener('touchstart', function(){}, false);
+  }
+})();
+</script>
+  </body>
+</html>
+
